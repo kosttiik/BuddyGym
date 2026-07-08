@@ -77,7 +77,7 @@ venv/
 htmlcov/
 .tox/
 
-# Node / frontend (на будущее)
+# Node / frontend
 node_modules/
 .next/
 .nuxt/
