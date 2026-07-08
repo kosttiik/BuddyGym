@@ -16,8 +16,9 @@ proto-py:
 		--grpc_python_out=checkin-service/app/pb \
 		$(PROTO_FILES)
 
+# swag version is pinned by core-service/go.mod
 swagger:
-	cd $(CORE_DIR) && swag init -g cmd/core/main.go -o docs --parseInternal
+	cd $(CORE_DIR) && go tool swag init -g cmd/core/main.go -o docs --parseInternal
 
 build:
 	cd $(CORE_DIR) && go build -o bin/core ./cmd/core
