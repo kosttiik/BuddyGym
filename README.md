@@ -49,3 +49,22 @@ go run ./cmd/core
 ```
 
 Codegen: `make proto` (Go stubs, committed), `make swagger` (OpenAPI spec, freshness is checked in CI).
+
+## Deploy (one compose for everything)
+
+The single [docker-compose.yml](docker-compose.yml) runs the whole stack: postgres (two databases), redis, minio and core (checkin joins later by uncommenting its block). All services have `restart: unless-stopped`; host ports are overridable via env (`CORE_HTTP_PORT`, `POSTGRES_PORT`, ...) in case of conflicts.
+
+Generic host / VPS:
+
+```bash
+git clone https://github.com/kosttiik/BuddyGym.git && cd BuddyGym
+cp .env.example .env   # set BOT_TOKEN, JWT_SECRET; change POSTGRES_PASSWORD and MINIO_* for anything non-local
+docker compose up -d --build
+curl localhost:8080/api/v1/health
+```
+
+Update: `git pull && docker compose up -d --build`.
+
+Synology NAS (Container Manager): create a Project pointing at the repo folder (clone it into a share, e.g. via git from SSH), pick this `docker-compose.yml`, upload `.env` on the project screen, build and run. DSM occupies some ports, so override clashing ones in `.env`.
+
+Exposed on the host: core API `:8080`, core gRPC `:9090` (checkin-service needs it when developed outside compose), postgres/redis/minio for development convenience. Before exposing the box to the internet, change every default password in `.env`.
