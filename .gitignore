@@ -95,3 +95,6 @@ logs/
 tmp/
 *.tmp
 *.bak
+
+# local-only docs for teammates
+/docs/

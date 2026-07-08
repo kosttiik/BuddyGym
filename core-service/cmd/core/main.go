@@ -15,6 +15,7 @@ import (
 	httpSwagger "github.com/swaggo/http-swagger/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/reflection"
 
 	pbv1 "github.com/kosttiik/BuddyGym/core-service/internal/pb/buddygym/v1"
 
@@ -102,6 +103,7 @@ func run(log *slog.Logger) error {
 	}
 	grpcSrv := grpc.NewServer()
 	pbv1.RegisterCoreInternalServiceServer(grpcSrv, grpcserver.New(users, rooms, results, log))
+	reflection.Register(grpcSrv)
 
 	errCh := make(chan error, 2)
 	go func() {

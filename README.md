@@ -40,5 +40,3 @@ go run ./cmd/core
 ```
 
 Кодоген: `make proto` (Go-стабы, коммитятся), `make swagger` (OpenAPI-спека).
-
-Для checkin-service см. [docs/checkin-service.md](docs/checkin-service.md).
