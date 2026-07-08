@@ -51,6 +51,8 @@ services:
       CORE_DB_DSN: postgres://${POSTGRES_USER:-buddygym}:${POSTGRES_PASSWORD:-buddygym}@postgres:5432/core_db?sslmode=disable
       REDIS_ADDR: redis:6379
       CHECKIN_GRPC_ADDR: checkin:9091
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_TTL: ${JWT_TTL:-24h}
     ports:
       - "8080:8080"
       - "9090:9090"

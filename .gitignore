@@ -1,12 +1,104 @@
+# env / secrets
 .env
-*.local
+.env.*
+!.env.example
+*.pem
+*.key
+
+# macOS
 .DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+*.stackdump
+
+# Linux
+*~
+.directory
+.Trash-*
+.nfs*
+
+# IDE / editors
 .idea/
 .vscode/
-*.log
-coverage.out
+*.swp
+*.swo
+*.iml
+.fleet/
+*.sublime-*
+
+# Claude / AI tooling
+.claude/
+CLAUDE.local.md
+
+# Go
 core-service/bin/
-dist/
+*.exe
+*.test
+*.out
+coverage.out
+coverage.html
+vendor/
+go.work
+go.work.sum
+
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
 .venv/
+venv/
+.python-version
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+
+# Node / frontend
+node_modules/
+.next/
+.nuxt/
+.cache/
+.parcel-cache/
+.turbo/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# logs / tmp
+*.log
+logs/
+tmp/
+*.tmp
+*.bak
+
+# local-only docs for teammates
+/docs/
+
+# agent rules, local-only
+CLAUDE.md
+AGENTS.md
