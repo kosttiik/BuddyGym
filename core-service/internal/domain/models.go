@@ -1,3 +1,4 @@
+// Package domain holds core entities and reward rules.
 package domain
 
 import "time"

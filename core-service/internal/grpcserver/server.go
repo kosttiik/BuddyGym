@@ -1,3 +1,4 @@
+// Package grpcserver implements CoreInternalService consumed by checkin-service.
 package grpcserver
 
 import (

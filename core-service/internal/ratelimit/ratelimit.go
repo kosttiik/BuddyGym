@@ -1,3 +1,4 @@
+// Package ratelimit is a Redis-backed fixed-window rate limiter.
 package ratelimit
 
 import (

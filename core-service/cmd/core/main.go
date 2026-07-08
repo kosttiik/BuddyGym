@@ -1,3 +1,5 @@
+// The core command runs the BuddyGym core service: REST API for the mini app
+// and the internal gRPC endpoint for checkin-service.
 package main
 
 import (

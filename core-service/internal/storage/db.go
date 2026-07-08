@@ -1,3 +1,4 @@
+// Package storage contains pgx repositories and embedded goose migrations.
 package storage
 
 import (
