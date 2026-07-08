@@ -128,6 +128,19 @@ definitions:
       username:
         type: string
     type: object
+  httpapi.AuthTelegramRequest:
+    properties:
+      init_data:
+        example: query_id=...&user=...&auth_date=...&hash=...
+        type: string
+    type: object
+  httpapi.AuthTelegramResponse:
+    properties:
+      token:
+        type: string
+      user:
+        $ref: '#/definitions/domain.User'
+    type: object
   httpapi.CreateCheckinGeoRequest:
     properties:
       geo:
@@ -227,6 +240,45 @@ info:
   title: BuddyGym Core API
   version: "1.0"
 paths:
+  /auth/telegram:
+    post:
+      consumes:
+      - application/json
+      description: Validates Mini App initData signature, upserts the user and issues
+        a Bearer token for all other endpoints.
+      parameters:
+      - description: raw initData string
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/httpapi.AuthTelegramRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpapi.AuthTelegramResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      summary: Exchange Telegram initData for a JWT
+      tags:
+      - auth
   /checkins/{id}/vote:
     post:
       consumes:
@@ -277,7 +329,7 @@ paths:
           schema:
             $ref: '#/definitions/httpapi.ErrorResponse'
       security:
-      - TmaAuth: []
+      - BearerAuth: []
       summary: Vote on a checkin
       tags:
       - checkins
@@ -317,7 +369,7 @@ paths:
           schema:
             $ref: '#/definitions/httpapi.ErrorResponse'
       security:
-      - TmaAuth: []
+      - BearerAuth: []
       summary: Get my profile
       tags:
       - me
@@ -353,7 +405,7 @@ paths:
           schema:
             $ref: '#/definitions/httpapi.ErrorResponse'
       security:
-      - TmaAuth: []
+      - BearerAuth: []
       summary: Update my profile
       tags:
       - me
@@ -378,7 +430,7 @@ paths:
           schema:
             $ref: '#/definitions/httpapi.ErrorResponse'
       security:
-      - TmaAuth: []
+      - BearerAuth: []
       summary: List my rooms
       tags:
       - rooms
@@ -414,7 +466,7 @@ paths:
           schema:
             $ref: '#/definitions/httpapi.ErrorResponse'
       security:
-      - TmaAuth: []
+      - BearerAuth: []
       summary: Create a room
       tags:
       - rooms
@@ -456,7 +508,7 @@ paths:
           schema:
             $ref: '#/definitions/httpapi.ErrorResponse'
       security:
-      - TmaAuth: []
+      - BearerAuth: []
       summary: Get room details
       tags:
       - rooms
@@ -515,7 +567,7 @@ paths:
           schema:
             $ref: '#/definitions/httpapi.ErrorResponse'
       security:
-      - TmaAuth: []
+      - BearerAuth: []
       summary: List room checkins
       tags:
       - checkins
@@ -568,7 +620,7 @@ paths:
           schema:
             $ref: '#/definitions/httpapi.ErrorResponse'
       security:
-      - TmaAuth: []
+      - BearerAuth: []
       summary: Create a checkin
       tags:
       - checkins
@@ -610,7 +662,7 @@ paths:
           schema:
             $ref: '#/definitions/httpapi.ErrorResponse'
       security:
-      - TmaAuth: []
+      - BearerAuth: []
       summary: Join an open room
       tags:
       - rooms
@@ -644,7 +696,7 @@ paths:
           schema:
             $ref: '#/definitions/httpapi.ErrorResponse'
       security:
-      - TmaAuth: []
+      - BearerAuth: []
       summary: Leave a room
       tags:
       - rooms
@@ -684,13 +736,13 @@ paths:
           schema:
             $ref: '#/definitions/httpapi.ErrorResponse'
       security:
-      - TmaAuth: []
+      - BearerAuth: []
       summary: Join a room by invite code
       tags:
       - rooms
 securityDefinitions:
-  TmaAuth:
-    description: 'Telegram Mini App auth: "tma <initData>"'
+  BearerAuth:
+    description: 'JWT from POST /auth/telegram: "Bearer <token>"'
     in: header
     name: Authorization
     type: apiKey

@@ -26,7 +26,7 @@ type VoteRequest struct {
 //	@Summary		Create a checkin
 //	@Description	Submits workout proof to checkin-service. Send multipart/form-data with a "photo" file (up to 10 MB), or JSON with a geo point for the fast path.
 //	@Tags			checkins
-//	@Security		TmaAuth
+//	@Security		BearerAuth
 //	@Accept			mpfd
 //	@Accept			json
 //	@Produce		json
@@ -92,7 +92,7 @@ func (s *Server) handleCreateCheckin(w http.ResponseWriter, r *http.Request) {
 //
 //	@Summary		List room checkins
 //	@Tags			checkins
-//	@Security		TmaAuth
+//	@Security		BearerAuth
 //	@Produce		json
 //	@Param			id		path		int		true	"room id"
 //	@Param			status	query		string	false	"filter by status"	Enums(pending, approved, rejected, expired)
@@ -143,7 +143,7 @@ func (s *Server) handleListCheckins(w http.ResponseWriter, r *http.Request) {
 //	@Summary		Vote on a checkin
 //	@Description	Approves or rejects a peer checkin. Only members of the checkin room can vote; voting for your own checkin is forbidden.
 //	@Tags			checkins
-//	@Security		TmaAuth
+//	@Security		BearerAuth
 //	@Accept			json
 //	@Produce		json
 //	@Param			id		path		string		true	"checkin id"

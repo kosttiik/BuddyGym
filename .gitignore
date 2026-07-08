@@ -98,3 +98,7 @@ tmp/
 
 # local-only docs for teammates
 /docs/
+
+# agent rules, local-only
+CLAUDE.md
+AGENTS.md

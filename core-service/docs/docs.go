@@ -15,11 +15,69 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/auth/telegram": {
+            "post": {
+                "description": "Validates Mini App initData signature, upserts the user and issues a Bearer token for all other endpoints.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Exchange Telegram initData for a JWT",
+                "parameters": [
+                    {
+                        "description": "raw initData string",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.AuthTelegramRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.AuthTelegramResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/checkins/{id}/vote": {
             "post": {
                 "security": [
                     {
-                        "TmaAuth": []
+                        "BearerAuth": []
                     }
                 ],
                 "description": "Approves or rejects a peer checkin. Only members of the checkin room can vote; voting for your own checkin is forbidden.",
@@ -127,7 +185,7 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "TmaAuth": []
+                        "BearerAuth": []
                     }
                 ],
                 "description": "Returns the authenticated user profile with achievements.",
@@ -162,7 +220,7 @@ const docTemplate = `{
             "patch": {
                 "security": [
                     {
-                        "TmaAuth": []
+                        "BearerAuth": []
                     }
                 ],
                 "description": "Changes the profile theme. Status is derived from workouts and cannot be set.",
@@ -219,7 +277,7 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "TmaAuth": []
+                        "BearerAuth": []
                     }
                 ],
                 "description": "Rooms the user belongs to, with the current period workout counter.",
@@ -257,7 +315,7 @@ const docTemplate = `{
             "post": {
                 "security": [
                     {
-                        "TmaAuth": []
+                        "BearerAuth": []
                     }
                 ],
                 "description": "Creates a room and enrolls the creator. Returns the room with its invite code.",
@@ -314,7 +372,7 @@ const docTemplate = `{
             "post": {
                 "security": [
                     {
-                        "TmaAuth": []
+                        "BearerAuth": []
                     }
                 ],
                 "description": "Joins any room using its invite code. Idempotent.",
@@ -377,7 +435,7 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "TmaAuth": []
+                        "BearerAuth": []
                     }
                 ],
                 "description": "Room with members. Invite-only rooms are visible to members only; the invite code is hidden from non-members.",
@@ -441,7 +499,7 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "TmaAuth": []
+                        "BearerAuth": []
                     }
                 ],
                 "produces": [
@@ -529,7 +587,7 @@ const docTemplate = `{
             "post": {
                 "security": [
                     {
-                        "TmaAuth": []
+                        "BearerAuth": []
                     }
                 ],
                 "description": "Submits workout proof to checkin-service. Send multipart/form-data with a \"photo\" file (up to 10 MB), or JSON with a geo point for the fast path.",
@@ -611,7 +669,7 @@ const docTemplate = `{
             "post": {
                 "security": [
                     {
-                        "TmaAuth": []
+                        "BearerAuth": []
                     }
                 ],
                 "description": "Joins an open room by id. Invite-only rooms require POST /rooms/join with a code. Idempotent.",
@@ -675,7 +733,7 @@ const docTemplate = `{
             "post": {
                 "security": [
                     {
-                        "TmaAuth": []
+                        "BearerAuth": []
                     }
                 ],
                 "produces": [
@@ -921,6 +979,26 @@ const docTemplate = `{
                 }
             }
         },
+        "httpapi.AuthTelegramRequest": {
+            "type": "object",
+            "properties": {
+                "init_data": {
+                    "type": "string",
+                    "example": "query_id=...\u0026user=...\u0026auth_date=...\u0026hash=..."
+                }
+            }
+        },
+        "httpapi.AuthTelegramResponse": {
+            "type": "object",
+            "properties": {
+                "token": {
+                    "type": "string"
+                },
+                "user": {
+                    "$ref": "#/definitions/domain.User"
+                }
+            }
+        },
         "httpapi.CreateCheckinGeoRequest": {
             "type": "object",
             "properties": {
@@ -1056,8 +1134,8 @@ const docTemplate = `{
         }
     },
     "securityDefinitions": {
-        "TmaAuth": {
-            "description": "Telegram Mini App auth: \"tma \u003cinitData\u003e\"",
+        "BearerAuth": {
+            "description": "JWT from POST /auth/telegram: \"Bearer \u003ctoken\u003e\"",
             "type": "apiKey",
             "name": "Authorization",
             "in": "header"

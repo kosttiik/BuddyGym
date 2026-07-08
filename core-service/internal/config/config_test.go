@@ -5,6 +5,7 @@ import "testing"
 func setRequired(t *testing.T) {
 	t.Setenv("BOT_TOKEN", "123:abc")
 	t.Setenv("CORE_DB_DSN", "postgres://localhost/core_db")
+	t.Setenv("JWT_SECRET", "test-secret-with-at-least-32-bytes!!")
 }
 
 func TestLoadDefaults(t *testing.T) {
@@ -22,15 +23,35 @@ func TestLoadDefaults(t *testing.T) {
 }
 
 func TestLoadMissingBotToken(t *testing.T) {
+	setRequired(t)
 	t.Setenv("BOT_TOKEN", "")
-	t.Setenv("CORE_DB_DSN", "postgres://localhost/core_db")
 	if _, err := Load(); err == nil {
 		t.Fatal("want error for missing BOT_TOKEN")
 	}
 }
 
+func TestLoadShortJWTSecret(t *testing.T) {
+	setRequired(t)
+	t.Setenv("JWT_SECRET", "short")
+	if _, err := Load(); err == nil {
+		t.Fatal("want error for short JWT_SECRET")
+	}
+	t.Setenv("JWT_SECRET", "")
+	if _, err := Load(); err == nil {
+		t.Fatal("want error for missing JWT_SECRET")
+	}
+}
+
+func TestLoadBadJWTTTL(t *testing.T) {
+	setRequired(t)
+	t.Setenv("JWT_TTL", "zzz")
+	if _, err := Load(); err == nil {
+		t.Fatal("want error for bad JWT_TTL")
+	}
+}
+
 func TestLoadMissingDSN(t *testing.T) {
-	t.Setenv("BOT_TOKEN", "123:abc")
+	setRequired(t)
 	t.Setenv("CORE_DB_DSN", "")
 	if _, err := Load(); err == nil {
 		t.Fatal("want error for missing CORE_DB_DSN")

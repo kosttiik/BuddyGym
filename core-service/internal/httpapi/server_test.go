@@ -22,12 +22,15 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/kosttiik/BuddyGym/core-service/internal/auth"
 	"github.com/kosttiik/BuddyGym/core-service/internal/checkin"
 	"github.com/kosttiik/BuddyGym/core-service/internal/domain"
 	"github.com/kosttiik/BuddyGym/core-service/internal/httpapi"
 )
 
 const testToken = "7000000000:AAtest-token-for-unit-tests"
+
+var jwtSecret = []byte("httpapi-test-secret-32-bytes-min!!")
 
 func initDataFor(userID int64) string {
 	fields := map[string]string{
@@ -65,19 +68,38 @@ type env struct {
 	redisErr error
 }
 
-func newEnv() *env {
+func newEnv(opts ...func(*httpapi.Options)) *env {
 	e := &env{users: newFakeUsers(), rooms: newFakeRooms(), checkins: newFakeCheckins()}
-	srv := httpapi.New(httpapi.Options{
-		Users:    e.users,
-		Rooms:    e.rooms,
-		Checkins: e.checkins,
-		BotToken: testToken,
-		AuthTTL:  24 * time.Hour,
-		DBPing:   func(context.Context) error { return e.dbErr },
+	o := httpapi.Options{
+		Users:     e.users,
+		Rooms:     e.rooms,
+		Checkins:  e.checkins,
+		BotToken:  testToken,
+		AuthTTL:   24 * time.Hour,
+		JWTSecret: jwtSecret,
+		JWTTTL:    time.Hour,
+		DBPing:    func(context.Context) error { return e.dbErr },
 		RedisPing: func(context.Context) error { return e.redisErr },
-	})
-	e.handler = srv.Handler()
+	}
+	for _, fn := range opts {
+		fn(&o)
+	}
+	e.handler = httpapi.New(o).Handler()
 	return e
+}
+
+// bearer registers the user and issues a valid token for it.
+func (e *env) bearer(t *testing.T, userID int64) string {
+	t.Helper()
+	if _, err := e.users.Upsert(context.Background(), userID,
+		fmt.Sprintf("user%d", userID), fmt.Sprintf("U%d", userID), ""); err != nil {
+		t.Fatal(err)
+	}
+	token, err := auth.IssueToken(jwtSecret, userID, time.Hour, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return "Bearer " + token
 }
 
 type reqOpts struct {
@@ -110,7 +132,7 @@ func (e *env) do(t *testing.T, method, path string, body any, opts reqOpts) *htt
 		if opts.userID == 0 {
 			opts.userID = 1
 		}
-		req.Header.Set("Authorization", "tma "+initDataFor(opts.userID))
+		req.Header.Set("Authorization", e.bearer(t, opts.userID))
 	}
 	rec := httptest.NewRecorder()
 	e.handler.ServeHTTP(rec, req)
@@ -137,7 +159,44 @@ func (e *env) createRoom(t *testing.T, creator int64, kind string) domain.Room {
 	return decode[domain.Room](t, rec)
 }
 
-func TestAuth(t *testing.T) {
+func TestAuthTelegramExchange(t *testing.T) {
+	e := newEnv()
+
+	rec := e.do(t, "POST", "/api/v1/auth/telegram",
+		httpapi.AuthTelegramRequest{InitData: initDataFor(42)}, reqOpts{noAuth: true})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("exchange: %d %s", rec.Code, rec.Body.String())
+	}
+	resp := decode[httpapi.AuthTelegramResponse](t, rec)
+	if resp.Token == "" || resp.User.ID != 42 {
+		t.Fatalf("unexpected auth response: %+v", resp)
+	}
+
+	req := httptest.NewRequest("GET", "/api/v1/me", nil)
+	req.Header.Set("Authorization", "Bearer "+resp.Token)
+	rec2 := httptest.NewRecorder()
+	e.handler.ServeHTTP(rec2, req)
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("me with issued token: %d %s", rec2.Code, rec2.Body.String())
+	}
+	me := decode[httpapi.MeResponse](t, rec2)
+	if me.User.ID != 42 || me.User.Username != "user42" {
+		t.Errorf("unexpected me: %+v", me.User)
+	}
+
+	rec = e.do(t, "POST", "/api/v1/auth/telegram",
+		httpapi.AuthTelegramRequest{InitData: "garbage=1&hash=beef"}, reqOpts{noAuth: true})
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("garbage initdata: %d", rec.Code)
+	}
+	rec = e.do(t, "POST", "/api/v1/auth/telegram",
+		httpapi.AuthTelegramRequest{}, reqOpts{noAuth: true})
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("empty init_data: %d", rec.Code)
+	}
+}
+
+func TestBearerAuth(t *testing.T) {
 	e := newEnv()
 
 	rec := e.do(t, "GET", "/api/v1/me", nil, reqOpts{noAuth: true})
@@ -145,24 +204,54 @@ func TestAuth(t *testing.T) {
 		t.Errorf("no header: %d", rec.Code)
 	}
 
+	for name, header := range map[string]string{
+		"garbage token": "Bearer not.a.jwt",
+		"wrong scheme":  "tma " + initDataFor(1),
+	} {
+		req := httptest.NewRequest("GET", "/api/v1/me", nil)
+		req.Header.Set("Authorization", header)
+		rec := httptest.NewRecorder()
+		e.handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("%s: %d", name, rec.Code)
+		}
+	}
+
+	// valid token but the user is gone from db
+	token, _ := auth.IssueToken(jwtSecret, 777, time.Hour, time.Now())
 	req := httptest.NewRequest("GET", "/api/v1/me", nil)
-	req.Header.Set("Authorization", "tma garbage=1&hash=beef")
+	req.Header.Set("Authorization", "Bearer "+token)
 	rec2 := httptest.NewRecorder()
 	e.handler.ServeHTTP(rec2, req)
 	if rec2.Code != http.StatusUnauthorized {
-		t.Errorf("garbage initdata: %d", rec2.Code)
+		t.Errorf("unknown user: %d", rec2.Code)
 	}
 
 	rec = e.do(t, "GET", "/api/v1/me", nil, reqOpts{userID: 42})
 	if rec.Code != http.StatusOK {
 		t.Errorf("valid auth: %d %s", rec.Code, rec.Body.String())
 	}
-	me := decode[httpapi.MeResponse](t, rec)
-	if me.User.ID != 42 || me.User.Username != "user42" {
-		t.Errorf("unexpected me: %+v", me.User)
-	}
-	if me.Achievements == nil {
+	if me := decode[httpapi.MeResponse](t, rec); me.Achievements == nil {
 		t.Error("achievements must be [] not null")
+	}
+}
+
+type denyLimiter struct{}
+
+func (denyLimiter) Allow(context.Context, string) (bool, error) { return false, nil }
+
+func TestRateLimited(t *testing.T) {
+	e := newEnv(func(o *httpapi.Options) { o.AuthLimiter = denyLimiter{} })
+	rec := e.do(t, "POST", "/api/v1/auth/telegram",
+		httpapi.AuthTelegramRequest{InitData: initDataFor(1)}, reqOpts{noAuth: true})
+	if rec.Code != http.StatusTooManyRequests {
+		t.Errorf("auth limiter: %d, want 429", rec.Code)
+	}
+
+	e = newEnv(func(o *httpapi.Options) { o.APILimiter = denyLimiter{} })
+	rec = e.do(t, "GET", "/api/v1/me", nil, reqOpts{userID: 1})
+	if rec.Code != http.StatusTooManyRequests {
+		t.Errorf("api limiter: %d, want 429", rec.Code)
 	}
 }
 

@@ -24,6 +24,7 @@ import (
 	"github.com/kosttiik/BuddyGym/core-service/internal/config"
 	"github.com/kosttiik/BuddyGym/core-service/internal/grpcserver"
 	"github.com/kosttiik/BuddyGym/core-service/internal/httpapi"
+	"github.com/kosttiik/BuddyGym/core-service/internal/ratelimit"
 	"github.com/kosttiik/BuddyGym/core-service/internal/storage"
 )
 
@@ -32,10 +33,10 @@ import (
 //	@description	Core service of BuddyGym: auth, users, rooms, rewards, checkin proxy.
 //	@BasePath		/api/v1
 
-//	@securityDefinitions.apikey	TmaAuth
+//	@securityDefinitions.apikey	BearerAuth
 //	@in							header
 //	@name						Authorization
-//	@description				Telegram Mini App auth: "tma <initData>"
+//	@description				JWT from POST /auth/telegram: "Bearer <token>"
 
 func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
@@ -79,12 +80,16 @@ func run(log *slog.Logger) error {
 	results := storage.NewResults(pool)
 
 	api := httpapi.New(httpapi.Options{
-		Users:    users,
-		Rooms:    rooms,
-		Checkins: checkin.NewClient(conn),
-		BotToken: cfg.BotToken,
-		AuthTTL:  cfg.AuthTTL,
-		DBPing:   pool.Ping,
+		Users:       users,
+		Rooms:       rooms,
+		Checkins:    checkin.NewClient(conn),
+		BotToken:    cfg.BotToken,
+		AuthTTL:     cfg.AuthTTL,
+		JWTSecret:   cfg.JWTSecret,
+		JWTTTL:      cfg.JWTTTL,
+		AuthLimiter: ratelimit.New(rdb, "auth", 10, time.Minute, log),
+		APILimiter:  ratelimit.New(rdb, "api", 120, time.Minute, log),
+		DBPing:      pool.Ping,
 		RedisPing: func(ctx context.Context) error {
 			return rdb.Ping(ctx).Err()
 		},

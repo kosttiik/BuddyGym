@@ -24,7 +24,7 @@ type UpdateMeRequest struct {
 //	@Summary		Get my profile
 //	@Description	Returns the authenticated user profile with achievements.
 //	@Tags			me
-//	@Security		TmaAuth
+//	@Security		BearerAuth
 //	@Produce		json
 //	@Success		200	{object}	MeResponse
 //	@Failure		401	{object}	ErrorResponse
@@ -48,7 +48,7 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 //	@Summary		Update my profile
 //	@Description	Changes the profile theme. Status is derived from workouts and cannot be set.
 //	@Tags			me
-//	@Security		TmaAuth
+//	@Security		BearerAuth
 //	@Accept			json
 //	@Produce		json
 //	@Param			body	body		UpdateMeRequest	true	"fields to update"

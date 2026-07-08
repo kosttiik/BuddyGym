@@ -39,28 +39,40 @@ type CheckinClient interface {
 
 type PingFunc func(ctx context.Context) error
 
+type RateLimiter interface {
+	Allow(ctx context.Context, key string) (bool, error)
+}
+
 type Server struct {
-	users     UsersRepo
-	rooms     RoomsRepo
-	checkins  CheckinClient
-	botToken  string
-	authTTL   time.Duration
-	dbPing    PingFunc
-	redisPing PingFunc
-	log       *slog.Logger
-	now       func() time.Time
+	users       UsersRepo
+	rooms       RoomsRepo
+	checkins    CheckinClient
+	botToken    string
+	authTTL     time.Duration
+	jwtSecret   []byte
+	jwtTTL      time.Duration
+	authLimiter RateLimiter
+	apiLimiter  RateLimiter
+	dbPing      PingFunc
+	redisPing   PingFunc
+	log         *slog.Logger
+	now         func() time.Time
 }
 
 type Options struct {
-	Users     UsersRepo
-	Rooms     RoomsRepo
-	Checkins  CheckinClient
-	BotToken  string
-	AuthTTL   time.Duration
-	DBPing    PingFunc
-	RedisPing PingFunc
-	Log       *slog.Logger
-	Now       func() time.Time
+	Users       UsersRepo
+	Rooms       RoomsRepo
+	Checkins    CheckinClient
+	BotToken    string
+	AuthTTL     time.Duration
+	JWTSecret   []byte
+	JWTTTL      time.Duration
+	AuthLimiter RateLimiter
+	APILimiter  RateLimiter
+	DBPing      PingFunc
+	RedisPing   PingFunc
+	Log         *slog.Logger
+	Now         func() time.Time
 }
 
 func New(opts Options) *Server {
@@ -71,15 +83,19 @@ func New(opts Options) *Server {
 		opts.Log = slog.Default()
 	}
 	return &Server{
-		users:     opts.Users,
-		rooms:     opts.Rooms,
-		checkins:  opts.Checkins,
-		botToken:  opts.BotToken,
-		authTTL:   opts.AuthTTL,
-		dbPing:    opts.DBPing,
-		redisPing: opts.RedisPing,
-		log:       opts.Log,
-		now:       opts.Now,
+		users:       opts.Users,
+		rooms:       opts.Rooms,
+		checkins:    opts.Checkins,
+		botToken:    opts.BotToken,
+		authTTL:     opts.AuthTTL,
+		jwtSecret:   opts.JWTSecret,
+		jwtTTL:      opts.JWTTTL,
+		authLimiter: opts.AuthLimiter,
+		apiLimiter:  opts.APILimiter,
+		dbPing:      opts.DBPing,
+		redisPing:   opts.RedisPing,
+		log:         opts.Log,
+		now:         opts.Now,
 	}
 }
 
@@ -87,6 +103,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/v1/health", s.handleHealth)
+	mux.HandleFunc("POST /api/v1/auth/telegram", s.handleAuthTelegram)
 
 	mux.HandleFunc("GET /api/v1/me", s.withAuth(s.handleGetMe))
 	mux.HandleFunc("PATCH /api/v1/me", s.withAuth(s.handlePatchMe))

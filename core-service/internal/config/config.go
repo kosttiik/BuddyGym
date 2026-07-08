@@ -14,6 +14,8 @@ type Config struct {
 	RedisAddr   string
 	CheckinAddr string
 	AuthTTL     time.Duration
+	JWTSecret   []byte
+	JWTTTL      time.Duration
 }
 
 func Load() (Config, error) {
@@ -31,12 +33,26 @@ func Load() (Config, error) {
 	if cfg.DBDSN == "" {
 		return Config{}, fmt.Errorf("CORE_DB_DSN is required")
 	}
-	raw := getenv("AUTH_TTL", "24h")
-	ttl, err := time.ParseDuration(raw)
-	if err != nil || ttl <= 0 {
-		return Config{}, fmt.Errorf("invalid AUTH_TTL %q", raw)
+	secret := os.Getenv("JWT_SECRET")
+	if len(secret) < 32 {
+		return Config{}, fmt.Errorf("JWT_SECRET must be at least 32 bytes")
 	}
-	cfg.AuthTTL = ttl
+	cfg.JWTSecret = []byte(secret)
+
+	for _, d := range []struct {
+		key, def string
+		dst      *time.Duration
+	}{
+		{"AUTH_TTL", "24h", &cfg.AuthTTL},
+		{"JWT_TTL", "24h", &cfg.JWTTTL},
+	} {
+		raw := getenv(d.key, d.def)
+		ttl, err := time.ParseDuration(raw)
+		if err != nil || ttl <= 0 {
+			return Config{}, fmt.Errorf("invalid %s %q", d.key, raw)
+		}
+		*d.dst = ttl
+	}
 	return cfg, nil
 }
 

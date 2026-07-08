@@ -76,7 +76,7 @@ func (s *Server) membership(w http.ResponseWriter, r *http.Request) (domain.Room
 //	@Summary		Create a room
 //	@Description	Creates a room and enrolls the creator. Returns the room with its invite code.
 //	@Tags			rooms
-//	@Security		TmaAuth
+//	@Security		BearerAuth
 //	@Accept			json
 //	@Produce		json
 //	@Param			body	body		CreateRoomRequest	true	"room settings"
@@ -114,7 +114,7 @@ func (s *Server) handleCreateRoom(w http.ResponseWriter, r *http.Request) {
 //	@Summary		List my rooms
 //	@Description	Rooms the user belongs to, with the current period workout counter.
 //	@Tags			rooms
-//	@Security		TmaAuth
+//	@Security		BearerAuth
 //	@Produce		json
 //	@Success		200	{array}		domain.RoomWithProgress
 //	@Failure		401	{object}	ErrorResponse
@@ -137,7 +137,7 @@ func (s *Server) handleListRooms(w http.ResponseWriter, r *http.Request) {
 //	@Summary		Get room details
 //	@Description	Room with members. Invite-only rooms are visible to members only; the invite code is hidden from non-members.
 //	@Tags			rooms
-//	@Security		TmaAuth
+//	@Security		BearerAuth
 //	@Produce		json
 //	@Param			id	path		int	true	"room id"
 //	@Success		200	{object}	RoomDetailResponse
@@ -183,7 +183,7 @@ func (s *Server) handleGetRoom(w http.ResponseWriter, r *http.Request) {
 //	@Summary		Join an open room
 //	@Description	Joins an open room by id. Invite-only rooms require POST /rooms/join with a code. Idempotent.
 //	@Tags			rooms
-//	@Security		TmaAuth
+//	@Security		BearerAuth
 //	@Produce		json
 //	@Param			id	path		int	true	"room id"
 //	@Success		200	{object}	domain.Room
@@ -220,7 +220,7 @@ func (s *Server) handleJoinRoom(w http.ResponseWriter, r *http.Request) {
 //	@Summary		Join a room by invite code
 //	@Description	Joins any room using its invite code. Idempotent.
 //	@Tags			rooms
-//	@Security		TmaAuth
+//	@Security		BearerAuth
 //	@Accept			json
 //	@Produce		json
 //	@Param			body	body		JoinByCodeRequest	true	"invite code"
@@ -256,7 +256,7 @@ func (s *Server) handleJoinByCode(w http.ResponseWriter, r *http.Request) {
 //
 //	@Summary		Leave a room
 //	@Tags			rooms
-//	@Security		TmaAuth
+//	@Security		BearerAuth
 //	@Produce		json
 //	@Param			id	path	int	true	"room id"
 //	@Success		204
