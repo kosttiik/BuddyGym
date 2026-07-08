@@ -1,0 +1,2 @@
+CREATE DATABASE core_db;
+CREATE DATABASE checkin_db;

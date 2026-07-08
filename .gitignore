@@ -1,0 +1,12 @@
+.env
+*.local
+.DS_Store
+.idea/
+.vscode/
+*.log
+coverage.out
+core-service/bin/
+dist/
+__pycache__/
+*.pyc
+.venv/
