@@ -12,11 +12,13 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	httpSwagger "github.com/swaggo/http-swagger/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
 	pbv1 "github.com/kosttiik/BuddyGym/core-service/internal/pb/buddygym/v1"
 
+	_ "github.com/kosttiik/BuddyGym/core-service/docs"
 	"github.com/kosttiik/BuddyGym/core-service/internal/checkin"
 	"github.com/kosttiik/BuddyGym/core-service/internal/config"
 	"github.com/kosttiik/BuddyGym/core-service/internal/grpcserver"
@@ -89,6 +91,8 @@ func run(log *slog.Logger) error {
 	})
 
 	root := http.NewServeMux()
+	root.Handle("GET /api/v1/docs/", httpSwagger.Handler(
+		httpSwagger.URL("/api/v1/docs/doc.json")))
 	root.Handle("/", api.Handler())
 
 	httpSrv := &http.Server{

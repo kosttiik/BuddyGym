@@ -1,0 +1,697 @@
+basePath: /api/v1
+definitions:
+  checkin.Checkin:
+    properties:
+      created_at:
+        type: string
+      expires_at:
+        type: string
+      geo:
+        $ref: '#/definitions/checkin.Geo'
+      id:
+        type: string
+      photo_url:
+        type: string
+      room_id:
+        type: integer
+      status:
+        enum:
+        - pending
+        - approved
+        - rejected
+        - expired
+        type: string
+      user_id:
+        type: integer
+      votes_approve:
+        type: integer
+      votes_reject:
+        type: integer
+      votes_required:
+        type: integer
+    type: object
+  checkin.Geo:
+    properties:
+      lat:
+        type: number
+      lon:
+        type: number
+    type: object
+  domain.Achievement:
+    properties:
+      granted_at:
+        type: string
+      key:
+        type: string
+    type: object
+  domain.Member:
+    properties:
+      created_at:
+        type: string
+      first_name:
+        type: string
+      id:
+        type: integer
+      joined_at:
+        type: string
+      photo_url:
+        type: string
+      status:
+        type: string
+      theme:
+        type: string
+      username:
+        type: string
+      workouts_count:
+        type: integer
+    type: object
+  domain.Room:
+    properties:
+      created_at:
+        type: string
+      creator_id:
+        type: integer
+      goal_per_period:
+        type: integer
+      id:
+        type: integer
+      invite_code:
+        type: string
+      kind:
+        type: string
+      name:
+        type: string
+      period_days:
+        type: integer
+      votes_required:
+        type: integer
+    type: object
+  domain.RoomWithProgress:
+    properties:
+      created_at:
+        type: string
+      creator_id:
+        type: integer
+      goal_per_period:
+        type: integer
+      id:
+        type: integer
+      invite_code:
+        type: string
+      kind:
+        type: string
+      members_count:
+        type: integer
+      name:
+        type: string
+      period_days:
+        type: integer
+      votes_required:
+        type: integer
+      workouts_count:
+        type: integer
+    type: object
+  domain.User:
+    properties:
+      created_at:
+        type: string
+      first_name:
+        type: string
+      id:
+        type: integer
+      photo_url:
+        type: string
+      status:
+        type: string
+      theme:
+        type: string
+      username:
+        type: string
+    type: object
+  httpapi.CreateCheckinGeoRequest:
+    properties:
+      geo:
+        $ref: '#/definitions/checkin.Geo'
+    type: object
+  httpapi.CreateRoomRequest:
+    properties:
+      goal_per_period:
+        example: 3
+        maximum: 100
+        minimum: 1
+        type: integer
+      kind:
+        enum:
+        - open
+        - invite
+        example: open
+        type: string
+      name:
+        example: Iron buddies
+        type: string
+      period_days:
+        example: 7
+        maximum: 90
+        minimum: 1
+        type: integer
+      votes_required:
+        example: 2
+        maximum: 20
+        minimum: 1
+        type: integer
+    type: object
+  httpapi.ErrorResponse:
+    properties:
+      error:
+        example: room not found
+        type: string
+    type: object
+  httpapi.HealthResponse:
+    properties:
+      postgres:
+        example: ok
+        type: string
+      redis:
+        example: ok
+        type: string
+      status:
+        enum:
+        - ok
+        - degraded
+        example: ok
+        type: string
+    type: object
+  httpapi.JoinByCodeRequest:
+    properties:
+      invite_code:
+        example: 7HKPQ2XW
+        type: string
+    type: object
+  httpapi.MeResponse:
+    properties:
+      achievements:
+        items:
+          $ref: '#/definitions/domain.Achievement'
+        type: array
+      user:
+        $ref: '#/definitions/domain.User'
+    type: object
+  httpapi.RoomDetailResponse:
+    properties:
+      members:
+        items:
+          $ref: '#/definitions/domain.Member'
+        type: array
+      room:
+        $ref: '#/definitions/domain.Room'
+    type: object
+  httpapi.UpdateMeRequest:
+    properties:
+      theme:
+        enum:
+        - default
+        - dark
+        - neon
+        example: dark
+        type: string
+    type: object
+  httpapi.VoteRequest:
+    properties:
+      approve:
+        example: true
+        type: boolean
+    type: object
+info:
+  contact: {}
+  description: 'Core service of BuddyGym: auth, users, rooms, rewards, checkin proxy.'
+  title: BuddyGym Core API
+  version: "1.0"
+paths:
+  /checkins/{id}/vote:
+    post:
+      consumes:
+      - application/json
+      description: Approves or rejects a peer checkin. Only members of the checkin
+        room can vote; voting for your own checkin is forbidden.
+      parameters:
+      - description: checkin id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: vote
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/httpapi.VoteRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/checkin.Checkin'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - TmaAuth: []
+      summary: Vote on a checkin
+      tags:
+      - checkins
+  /health:
+    get:
+      description: Reports core-service health including Postgres and Redis connectivity.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpapi.HealthResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/httpapi.HealthResponse'
+      summary: Service health
+      tags:
+      - system
+  /me:
+    get:
+      description: Returns the authenticated user profile with achievements.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpapi.MeResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - TmaAuth: []
+      summary: Get my profile
+      tags:
+      - me
+    patch:
+      consumes:
+      - application/json
+      description: Changes the profile theme. Status is derived from workouts and
+        cannot be set.
+      parameters:
+      - description: fields to update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/httpapi.UpdateMeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.User'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - TmaAuth: []
+      summary: Update my profile
+      tags:
+      - me
+  /rooms:
+    get:
+      description: Rooms the user belongs to, with the current period workout counter.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/domain.RoomWithProgress'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - TmaAuth: []
+      summary: List my rooms
+      tags:
+      - rooms
+    post:
+      consumes:
+      - application/json
+      description: Creates a room and enrolls the creator. Returns the room with its
+        invite code.
+      parameters:
+      - description: room settings
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/httpapi.CreateRoomRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/domain.Room'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - TmaAuth: []
+      summary: Create a room
+      tags:
+      - rooms
+  /rooms/{id}:
+    get:
+      description: Room with members. Invite-only rooms are visible to members only;
+        the invite code is hidden from non-members.
+      parameters:
+      - description: room id
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpapi.RoomDetailResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - TmaAuth: []
+      summary: Get room details
+      tags:
+      - rooms
+  /rooms/{id}/checkins:
+    get:
+      parameters:
+      - description: room id
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: filter by status
+        enum:
+        - pending
+        - approved
+        - rejected
+        - expired
+        in: query
+        name: status
+        type: string
+      - description: page size, default 20, max 100
+        in: query
+        name: limit
+        type: integer
+      - description: page offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/checkin.Checkin'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - TmaAuth: []
+      summary: List room checkins
+      tags:
+      - checkins
+    post:
+      consumes:
+      - multipart/form-data
+      - application/json
+      description: Submits workout proof to checkin-service. Send multipart/form-data
+        with a "photo" file (up to 10 MB), or JSON with a geo point for the fast path.
+      parameters:
+      - description: room id
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: workout photo
+        in: formData
+        name: photo
+        type: file
+      - description: geo proof (json variant)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/httpapi.CreateCheckinGeoRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/checkin.Checkin'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - TmaAuth: []
+      summary: Create a checkin
+      tags:
+      - checkins
+  /rooms/{id}/join:
+    post:
+      description: Joins an open room by id. Invite-only rooms require POST /rooms/join
+        with a code. Idempotent.
+      parameters:
+      - description: room id
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.Room'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - TmaAuth: []
+      summary: Join an open room
+      tags:
+      - rooms
+  /rooms/{id}/leave:
+    post:
+      parameters:
+      - description: room id
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - TmaAuth: []
+      summary: Leave a room
+      tags:
+      - rooms
+  /rooms/join:
+    post:
+      consumes:
+      - application/json
+      description: Joins any room using its invite code. Idempotent.
+      parameters:
+      - description: invite code
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/httpapi.JoinByCodeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.Room'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - TmaAuth: []
+      summary: Join a room by invite code
+      tags:
+      - rooms
+securityDefinitions:
+  TmaAuth:
+    description: 'Telegram Mini App auth: "tma <initData>"'
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
