@@ -1,0 +1,88 @@
+syntax = "proto3";
+
+package buddygym.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/kosttiik/BuddyGym/core-service/internal/pb/buddygym/v1;pbv1";
+
+// CheckinService is implemented by checkin-service (Python).
+// core-service calls it as a proxy for the frontend.
+service CheckinService {
+  rpc CreateCheckin(CreateCheckinRequest) returns (CreateCheckinResponse);
+  rpc GetCheckin(GetCheckinRequest) returns (GetCheckinResponse);
+  rpc ListRoomCheckins(ListRoomCheckinsRequest) returns (ListRoomCheckinsResponse);
+  rpc CastVote(CastVoteRequest) returns (CastVoteResponse);
+}
+
+enum CheckinStatus {
+  CHECKIN_STATUS_UNSPECIFIED = 0;
+  CHECKIN_STATUS_PENDING = 1;
+  CHECKIN_STATUS_APPROVED = 2;
+  CHECKIN_STATUS_REJECTED = 3;
+  CHECKIN_STATUS_EXPIRED = 4;
+}
+
+message GeoPoint {
+  double lat = 1;
+  double lon = 2;
+}
+
+message Checkin {
+  string id = 1;
+  int64 room_id = 2;
+  int64 user_id = 3;
+  CheckinStatus status = 4;
+  string photo_url = 5;
+  GeoPoint geo = 6;
+  int32 votes_approve = 7;
+  int32 votes_reject = 8;
+  int32 votes_required = 9;
+  google.protobuf.Timestamp created_at = 10;
+  google.protobuf.Timestamp expires_at = 11;
+}
+
+message CreateCheckinRequest {
+  int64 room_id = 1;
+  int64 user_id = 2;
+  // quorum is decided by core from room settings
+  int32 votes_required = 3;
+  oneof proof {
+    bytes photo = 4;
+    GeoPoint geo = 5;
+  }
+}
+
+message CreateCheckinResponse {
+  Checkin checkin = 1;
+}
+
+message GetCheckinRequest {
+  string checkin_id = 1;
+}
+
+message GetCheckinResponse {
+  Checkin checkin = 1;
+}
+
+message ListRoomCheckinsRequest {
+  int64 room_id = 1;
+  // unspecified means all statuses
+  CheckinStatus status = 2;
+  int32 limit = 3;
+  int32 offset = 4;
+}
+
+message ListRoomCheckinsResponse {
+  repeated Checkin checkins = 1;
+}
+
+message CastVoteRequest {
+  string checkin_id = 1;
+  int64 voter_id = 2;
+  bool approve = 3;
+}
+
+message CastVoteResponse {
+  Checkin checkin = 1;
+}
