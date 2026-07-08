@@ -1,3 +1,4 @@
+// Package auth validates Telegram Mini App init data and issues JWT session tokens.
 package auth
 
 import (

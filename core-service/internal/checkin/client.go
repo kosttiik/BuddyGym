@@ -1,3 +1,4 @@
+// Package checkin wraps the gRPC client for checkin-service.
 package checkin
 
 import (

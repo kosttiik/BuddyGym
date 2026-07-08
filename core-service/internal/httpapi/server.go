@@ -1,3 +1,4 @@
+// Package httpapi is the REST API consumed by the mini app frontend.
 package httpapi
 
 import (
