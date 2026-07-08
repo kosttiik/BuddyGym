@@ -4,16 +4,22 @@ Telegram Mini App: gather in rooms and keep each other accountable for gym visit
 
 ## Architecture
 
-```
-Telegram Mini App (frontend)
-        │ HTTPS
-        ▼
-  core-service (Go)  ◄── gRPC ──►  checkin-service (Python)
-   │          │                     │            │
-   ▼          ▼                     ▼            ▼
-core-db     Redis               checkin-db   MinIO/S3
-(Postgres)  (rate limit,        (Postgres)   (photos)
-             locks)
+```mermaid
+flowchart TB
+    tma["Telegram Mini App<br>(frontend)"]
+    core["core-service · Go<br>auth, users, rooms, rewards"]
+    checkin["checkin-service · Python<br>photos, geo, peer votes"]
+    coredb[("core-db<br>PostgreSQL")]
+    redis[("Redis<br>rate limit, locks")]
+    checkindb[("checkin-db<br>PostgreSQL")]
+    s3[("MinIO / S3<br>photos")]
+
+    tma -- HTTPS --> core
+    core <-- gRPC --> checkin
+    core --> coredb
+    core --> redis
+    checkin --> checkindb
+    checkin --> s3
 ```
 
 - **core-service** (Go) is the API gateway for the frontend: Telegram auth, users, rooms, membership, rewards. It also implements `CoreInternalService` (gRPC) for callbacks from checkin.
