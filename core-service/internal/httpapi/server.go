@@ -109,6 +109,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/me", s.withAuth(s.handleGetMe))
 	mux.HandleFunc("PATCH /api/v1/me", s.withAuth(s.handlePatchMe))
 
+	mux.HandleFunc("GET /api/v1/users/{id}", s.withAuth(s.handleGetUser))
+
 	mux.HandleFunc("POST /api/v1/rooms", s.withAuth(s.handleCreateRoom))
 	mux.HandleFunc("GET /api/v1/rooms", s.withAuth(s.handleListRooms))
 	mux.HandleFunc("GET /api/v1/rooms/{id}", s.withAuth(s.handleGetRoom))
