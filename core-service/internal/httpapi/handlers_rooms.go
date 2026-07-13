@@ -223,7 +223,7 @@ func (s *Server) handleListRooms(w http.ResponseWriter, r *http.Request) {
 // handleListOpenRooms godoc
 //
 //	@Summary		List open rooms
-//	@Description	Rooms anyone can join. Invite codes are not returned.
+//	@Description	Rooms anyone can join, excluding the ones the user is already in. Invite codes are not returned.
 //	@Tags			rooms
 //	@Security		BearerAuth
 //	@Produce		json
@@ -232,7 +232,7 @@ func (s *Server) handleListRooms(w http.ResponseWriter, r *http.Request) {
 //	@Failure		500	{object}	ErrorResponse
 //	@Router			/rooms/open [get]
 func (s *Server) handleListOpenRooms(w http.ResponseWriter, r *http.Request) {
-	rooms, err := s.rooms.ListOpen(r.Context())
+	rooms, err := s.rooms.ListOpen(r.Context(), userFrom(r.Context()).ID)
 	if err != nil {
 		s.internal(w, err)
 		return
