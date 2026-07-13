@@ -228,6 +228,15 @@ definitions:
         example: dark
         type: string
     type: object
+  httpapi.UserProfileResponse:
+    properties:
+      achievements:
+        items:
+          $ref: '#/definitions/domain.Achievement'
+        type: array
+      user:
+        $ref: '#/definitions/domain.User'
+    type: object
   httpapi.VoteRequest:
     properties:
       approve:
@@ -740,6 +749,43 @@ paths:
       summary: Join a room by invite code
       tags:
       - rooms
+  /users/{id}:
+    get:
+      description: Public profile of any user by id, with achievements.
+      parameters:
+      - description: user id
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/httpapi.UserProfileResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a user profile
+      tags:
+      - users
 securityDefinitions:
   BearerAuth:
     description: 'JWT from POST /auth/telegram: "Bearer <token>"'
