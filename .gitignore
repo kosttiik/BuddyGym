@@ -102,3 +102,7 @@ tmp/
 # agent rules, local-only
 CLAUDE.md
 AGENTS.md
+
+# nested repos, cloned locally (own git remotes)
+/frontend/
+/checkin-service/

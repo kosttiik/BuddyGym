@@ -87,16 +87,17 @@ func run(log *slog.Logger) error {
 	results := storage.NewResults(pool)
 
 	api := httpapi.New(httpapi.Options{
-		Users:       users,
-		Rooms:       rooms,
-		Checkins:    checkin.NewClient(conn),
-		BotToken:    cfg.BotToken,
-		AuthTTL:     cfg.AuthTTL,
-		JWTSecret:   cfg.JWTSecret,
-		JWTTTL:      cfg.JWTTTL,
-		AuthLimiter: ratelimit.New(rdb, "auth", 10, time.Minute, log),
-		APILimiter:  ratelimit.New(rdb, "api", 120, time.Minute, log),
-		DBPing:      pool.Ping,
+		Users:          users,
+		Rooms:          rooms,
+		Checkins:       checkin.NewClient(conn),
+		BotToken:       cfg.BotToken,
+		AuthTTL:        cfg.AuthTTL,
+		JWTSecret:      cfg.JWTSecret,
+		JWTTTL:         cfg.JWTTTL,
+		AuthLimiter:    ratelimit.New(rdb, "auth", 10, time.Minute, log),
+		APILimiter:     ratelimit.New(rdb, "api", 120, time.Minute, log),
+		CheckinLimiter: ratelimit.New(rdb, "checkin", 20, time.Hour, log),
+		DBPing:         pool.Ping,
 		RedisPing: func(ctx context.Context) error {
 			return rdb.Ping(ctx).Err()
 		},

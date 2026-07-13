@@ -1,6 +1,8 @@
 package httpapi
 
 import (
+	"bytes"
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
@@ -11,10 +13,40 @@ import (
 	"github.com/kosttiik/BuddyGym/core-service/internal/checkin"
 )
 
-const maxPhotoSize = 10 << 20
+const (
+	maxPhotoSize    = 10 << 20
+	maxCheckinRooms = 20
+)
+
+var allowedPhotoTypes = map[string]bool{
+	"image/jpeg": true,
+	"image/png":  true,
+	"image/gif":  true,
+	"image/webp": true,
+	"image/heic": true,
+}
+
+// isImage sniffs magic bytes. A client-declared content type proves nothing, and an
+// SVG or HTML payload stored as a "photo" would be served back as active content.
+func isImage(b []byte) bool {
+	switch {
+	case bytes.HasPrefix(b, []byte("\xff\xd8\xff")):
+		return true
+	case bytes.HasPrefix(b, []byte("\x89PNG\r\n\x1a\n")):
+		return true
+	case bytes.HasPrefix(b, []byte("GIF87a")), bytes.HasPrefix(b, []byte("GIF89a")):
+		return true
+	case len(b) >= 12 && bytes.Equal(b[0:4], []byte("RIFF")) && bytes.Equal(b[8:12], []byte("WEBP")):
+		return true
+	case len(b) >= 12 && bytes.Equal(b[4:8], []byte("ftyp")):
+		return true
+	}
+	return false
+}
 
 type CreateCheckinGeoRequest struct {
-	Geo checkin.Geo `json:"geo"`
+	RoomIDs []int64     `json:"room_ids"`
+	Geo     checkin.Geo `json:"geo"`
 }
 
 type VoteRequest struct {
@@ -23,31 +55,33 @@ type VoteRequest struct {
 
 // handleCreateCheckin godoc
 //
-//	@Summary		Create a checkin
-//	@Description	Submits workout proof to checkin-service. Send multipart/form-data with a "photo" file (up to 10 MB), or JSON with a geo point for the fast path.
+//	@Summary		Create a checkin in one or more rooms
+//	@Description	Submits one workout proof to every listed room. A photo is uploaded once and shared by all of them, so posting to several rooms never stores it twice. Send multipart/form-data with a "photo" file (up to 10 MB) and repeated "room_ids" fields, or JSON with a geo point and room_ids for the fast path. The caller must be a member of every room.
 //	@Tags			checkins
 //	@Security		BearerAuth
 //	@Accept			mpfd
 //	@Accept			json
 //	@Produce		json
-//	@Param			id		path		int						true	"room id"
-//	@Param			photo	formData	file					false	"workout photo"
-//	@Param			body	body		CreateCheckinGeoRequest	false	"geo proof (json variant)"
-//	@Success		201		{object}	checkin.Checkin
-//	@Failure		400		{object}	ErrorResponse
-//	@Failure		401		{object}	ErrorResponse
-//	@Failure		403		{object}	ErrorResponse
-//	@Failure		404		{object}	ErrorResponse
-//	@Failure		502		{object}	ErrorResponse
-//	@Router			/rooms/{id}/checkins [post]
+//	@Param			photo		formData	file					false	"workout photo"
+//	@Param			room_ids	formData	[]int					false	"rooms to submit to"
+//	@Param			body		body		CreateCheckinGeoRequest	false	"geo proof (json variant)"
+//	@Success		201			{array}		checkin.Checkin
+//	@Failure		400			{object}	ErrorResponse
+//	@Failure		401			{object}	ErrorResponse
+//	@Failure		403			{object}	ErrorResponse
+//	@Failure		404			{object}	ErrorResponse
+//	@Failure		429			{object}	ErrorResponse
+//	@Failure		502			{object}	ErrorResponse
+//	@Router			/checkins [post]
 func (s *Server) handleCreateCheckin(w http.ResponseWriter, r *http.Request) {
-	room, ok := s.membership(w, r)
-	if !ok {
+	user := userFrom(r.Context())
+	if !s.allow(w, r, s.checkinLimiter, strconv.FormatInt(user.ID, 10)) {
 		return
 	}
 
 	var photo []byte
 	var geo *checkin.Geo
+	var roomIDs []int64
 
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
 		r.Body = http.MaxBytesReader(w, r.Body, maxPhotoSize+1<<20)
@@ -66,6 +100,15 @@ func (s *Server) handleCreateCheckin(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusBadRequest, "photo must be 1 byte .. 10 MB")
 			return
 		}
+		if !isImage(photo) {
+			writeErr(w, http.StatusBadRequest, "photo must be JPEG, PNG, GIF, WebP or HEIC")
+			return
+		}
+		roomIDs, err = parseRoomIDs(r.MultipartForm.Value["room_ids"])
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
 	} else {
 		var req CreateCheckinGeoRequest
 		if !decodeJSON(w, r, &req) {
@@ -77,15 +120,141 @@ func (s *Server) handleCreateCheckin(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		geo = &req.Geo
+		roomIDs = req.RoomIDs
 	}
 
-	created, err := s.checkins.Create(r.Context(), room.ID, userFrom(r.Context()).ID,
-		int32(room.VotesRequired), photo, geo)
+	targets, ok := s.resolveTargets(w, r, roomIDs)
+	if !ok {
+		return
+	}
+
+	created, err := s.checkins.Create(r.Context(), user.ID, targets, photo, geo)
 	if err != nil {
 		s.mapError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, created)
+}
+
+// resolveTargets rejects the whole request unless the caller is a member of every
+// room, so a checkin can never be planted in a room the user does not belong to.
+func (s *Server) resolveTargets(w http.ResponseWriter, r *http.Request, roomIDs []int64) ([]checkin.Target, bool) {
+	if len(roomIDs) == 0 || len(roomIDs) > maxCheckinRooms {
+		writeErr(w, http.StatusBadRequest, "room_ids must list 1.."+strconv.Itoa(maxCheckinRooms)+" rooms")
+		return nil, false
+	}
+
+	user := userFrom(r.Context())
+	seen := make(map[int64]struct{}, len(roomIDs))
+	targets := make([]checkin.Target, 0, len(roomIDs))
+
+	for _, roomID := range roomIDs {
+		if _, dup := seen[roomID]; dup {
+			writeErr(w, http.StatusBadRequest, "room_ids must not repeat a room")
+			return nil, false
+		}
+		seen[roomID] = struct{}{}
+
+		room, err := s.rooms.Get(r.Context(), roomID)
+		if err != nil {
+			s.mapError(w, err)
+			return nil, false
+		}
+		member, err := s.rooms.IsMember(r.Context(), roomID, user.ID)
+		if err != nil {
+			s.internal(w, err)
+			return nil, false
+		}
+		if !member {
+			writeErr(w, http.StatusForbidden, "room members only")
+			return nil, false
+		}
+		targets = append(targets, checkin.Target{
+			RoomID:        room.ID,
+			VotesRequired: int32(room.VotesRequired),
+		})
+	}
+	return targets, true
+}
+
+func parseRoomIDs(values []string) ([]int64, error) {
+	ids := make([]int64, 0, len(values))
+	for _, raw := range values {
+		for _, part := range strings.Split(raw, ",") {
+			part = strings.TrimSpace(part)
+			if part == "" {
+				continue
+			}
+			id, err := strconv.ParseInt(part, 10, 64)
+			if err != nil || id <= 0 {
+				return nil, errors.New("room_ids must be positive integers")
+			}
+			ids = append(ids, id)
+		}
+	}
+	return ids, nil
+}
+
+// handleGetCheckinPhoto godoc
+//
+//	@Summary		Download a checkin photo
+//	@Description	Streams the proof photo. The object storage bucket is private: only members of the room the checkin belongs to can read it, and the bytes are proxied through core-service. Requires a Bearer token, so browsers must fetch it via XHR rather than a plain <img src>.
+//	@Tags			checkins
+//	@Security		BearerAuth
+//	@Produce		image/jpeg
+//	@Produce		image/png
+//	@Param			id	path		string	true	"checkin id"
+//	@Success		200	{file}		binary
+//	@Failure		401	{object}	ErrorResponse
+//	@Failure		403	{object}	ErrorResponse
+//	@Failure		404	{object}	ErrorResponse
+//	@Failure		502	{object}	ErrorResponse
+//	@Router			/checkins/{id}/photo [get]
+func (s *Server) handleGetCheckinPhoto(w http.ResponseWriter, r *http.Request) {
+	checkinID := r.PathValue("id")
+	if checkinID == "" {
+		writeErr(w, http.StatusBadRequest, "invalid checkin id")
+		return
+	}
+
+	target, err := s.checkins.Get(r.Context(), checkinID)
+	if err != nil {
+		s.mapError(w, err)
+		return
+	}
+	if !target.HasPhoto {
+		writeErr(w, http.StatusNotFound, "checkin has no photo")
+		return
+	}
+
+	member, err := s.rooms.IsMember(r.Context(), target.RoomID, userFrom(r.Context()).ID)
+	if err != nil {
+		s.internal(w, err)
+		return
+	}
+	if !member {
+		writeErr(w, http.StatusForbidden, "room members only")
+		return
+	}
+
+	photo, err := s.checkins.OpenPhoto(r.Context(), checkinID)
+	if err != nil {
+		s.mapError(w, err)
+		return
+	}
+
+	contentType := photo.ContentType
+	if !allowedPhotoTypes[contentType] {
+		contentType = "application/octet-stream"
+	}
+	w.Header().Set("Content-Type", contentType)
+	// never let a browser sniff these bytes into something executable
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Disposition", "inline")
+	w.Header().Set("Cache-Control", "private, max-age=300")
+	if _, err := io.Copy(w, photo.Body); err != nil {
+		s.log.Error("streaming checkin photo failed", "checkin_id", checkinID, "err", err)
+	}
 }
 
 // handleListCheckins godoc

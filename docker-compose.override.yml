@@ -1,0 +1,25 @@
+# Development only. Compose loads this automatically, so `docker compose up` exposes the
+# stack on the host. Production runs with explicit -f flags and never picks it up, which
+# keeps postgres, redis and minio off the host by default.
+services:
+  postgres:
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+
+  redis:
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+
+  minio:
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+
+  core:
+    ports:
+      - "${CORE_HTTP_PORT:-8080}:8080"
+      - "${CORE_GRPC_PORT:-9090}:9090"
+
+  checkin:
+    ports:
+      - "${CHECKIN_GRPC_PORT:-9091}:9091"

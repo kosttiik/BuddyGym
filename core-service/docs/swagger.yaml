@@ -8,10 +8,17 @@ definitions:
         type: string
       geo:
         $ref: '#/definitions/checkin.Geo'
+      has_photo:
+        description: the storage key never leaves core; clients fetch bytes from /checkins/{id}/photo
+        type: boolean
       id:
         type: string
-      photo_url:
+      photo_expires_at:
         type: string
+      photo_purged:
+        description: photos are purged after a retention window; once purged the bytes
+          are gone for good
+        type: boolean
       room_id:
         type: integer
       status:
@@ -145,6 +152,10 @@ definitions:
     properties:
       geo:
         $ref: '#/definitions/checkin.Geo'
+      room_ids:
+        items:
+          type: integer
+        type: array
     type: object
   httpapi.CreateRoomRequest:
     properties:
@@ -288,6 +299,112 @@ paths:
       summary: Exchange Telegram initData for a JWT
       tags:
       - auth
+  /checkins:
+    post:
+      consumes:
+      - multipart/form-data
+      - application/json
+      description: Submits one workout proof to every listed room. A photo is uploaded
+        once and shared by all of them, so posting to several rooms never stores it
+        twice. Send multipart/form-data with a "photo" file (up to 10 MB) and repeated
+        "room_ids" fields, or JSON with a geo point and room_ids for the fast path.
+        The caller must be a member of every room.
+      parameters:
+      - description: workout photo
+        in: formData
+        name: photo
+        type: file
+      - collectionFormat: csv
+        description: rooms to submit to
+        in: formData
+        items:
+          type: integer
+        name: room_ids
+        type: array
+      - description: geo proof (json variant)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/httpapi.CreateCheckinGeoRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            items:
+              $ref: '#/definitions/checkin.Checkin'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a checkin in one or more rooms
+      tags:
+      - checkins
+  /checkins/{id}/photo:
+    get:
+      description: 'Streams the proof photo. The object storage bucket is private:
+        only members of the room the checkin belongs to can read it, and the bytes
+        are proxied through core-service. Requires a Bearer token, so browsers must
+        fetch it via XHR rather than a plain <img src>.'
+      parameters:
+      - description: checkin id
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - image/jpeg
+      - image/png
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Download a checkin photo
+      tags:
+      - checkins
   /checkins/{id}/vote:
     post:
       consumes:
@@ -578,59 +695,6 @@ paths:
       security:
       - BearerAuth: []
       summary: List room checkins
-      tags:
-      - checkins
-    post:
-      consumes:
-      - multipart/form-data
-      - application/json
-      description: Submits workout proof to checkin-service. Send multipart/form-data
-        with a "photo" file (up to 10 MB), or JSON with a geo point for the fast path.
-      parameters:
-      - description: room id
-        in: path
-        name: id
-        required: true
-        type: integer
-      - description: workout photo
-        in: formData
-        name: photo
-        type: file
-      - description: geo proof (json variant)
-        in: body
-        name: body
-        schema:
-          $ref: '#/definitions/httpapi.CreateCheckinGeoRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/checkin.Checkin'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/httpapi.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/httpapi.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/httpapi.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/httpapi.ErrorResponse'
-        "502":
-          description: Bad Gateway
-          schema:
-            $ref: '#/definitions/httpapi.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Create a checkin
       tags:
       - checkins
   /rooms/{id}/join:
