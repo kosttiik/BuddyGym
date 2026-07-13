@@ -3,6 +3,7 @@ package checkin
 
 import (
 	"context"
+	"io"
 	"time"
 
 	"google.golang.org/grpc"
@@ -15,18 +16,28 @@ type Geo struct {
 	Lon float64 `json:"lon"`
 }
 
+// Target is one room a proof is submitted to. Quorum is per room.
+type Target struct {
+	RoomID        int64
+	VotesRequired int32
+}
+
 type Checkin struct {
-	ID            string    `json:"id"`
-	RoomID        int64     `json:"room_id"`
-	UserID        int64     `json:"user_id"`
-	Status        string    `json:"status" enums:"pending,approved,rejected,expired"`
-	PhotoURL      string    `json:"photo_url,omitempty"`
-	Geo           *Geo      `json:"geo,omitempty"`
-	VotesApprove  int32     `json:"votes_approve"`
-	VotesReject   int32     `json:"votes_reject"`
-	VotesRequired int32     `json:"votes_required"`
-	CreatedAt     time.Time `json:"created_at"`
-	ExpiresAt     time.Time `json:"expires_at"`
+	ID     string `json:"id"`
+	RoomID int64  `json:"room_id"`
+	UserID int64  `json:"user_id"`
+	Status string `json:"status" enums:"pending,approved,rejected,expired"`
+	// the storage key never leaves core; clients fetch bytes from /checkins/{id}/photo
+	HasPhoto bool `json:"has_photo"`
+	// photos are purged after a retention window; once purged the bytes are gone for good
+	PhotoPurged    bool       `json:"photo_purged"`
+	PhotoExpiresAt *time.Time `json:"photo_expires_at,omitempty"`
+	Geo            *Geo       `json:"geo,omitempty"`
+	VotesApprove   int32      `json:"votes_approve"`
+	VotesReject    int32      `json:"votes_reject"`
+	VotesRequired  int32      `json:"votes_required"`
+	CreatedAt      time.Time  `json:"created_at"`
+	ExpiresAt      time.Time  `json:"expires_at"`
 }
 
 var statusNames = map[pbv1.CheckinStatus]string{
@@ -54,10 +65,15 @@ func fromPB(c *pbv1.Checkin) Checkin {
 		RoomID:        c.RoomId,
 		UserID:        c.UserId,
 		Status:        statusNames[c.Status],
-		PhotoURL:      c.PhotoUrl,
+		HasPhoto:      c.PhotoKey != "" && !c.PhotoPurged,
+		PhotoPurged:   c.PhotoPurged,
 		VotesApprove:  c.VotesApprove,
 		VotesReject:   c.VotesReject,
 		VotesRequired: c.VotesRequired,
+	}
+	if c.PhotoExpiresAt != nil {
+		at := c.PhotoExpiresAt.AsTime()
+		out.PhotoExpiresAt = &at
 	}
 	if c.Geo != nil {
 		out.Geo = &Geo{Lat: c.Geo.Lat, Lon: c.Geo.Lon}
@@ -79,11 +95,15 @@ func NewClient(conn grpc.ClientConnInterface) *Client {
 	return &Client{api: pbv1.NewCheckinServiceClient(conn)}
 }
 
-func (c *Client) Create(ctx context.Context, roomID, userID int64, votesRequired int32, photo []byte, geo *Geo) (Checkin, error) {
-	req := &pbv1.CreateCheckinRequest{
-		RoomId:        roomID,
-		UserId:        userID,
-		VotesRequired: votesRequired,
+// Create submits one proof to every target room. A photo is uploaded once and
+// shared by all of the checkins it produces.
+func (c *Client) Create(ctx context.Context, userID int64, targets []Target, photo []byte, geo *Geo) ([]Checkin, error) {
+	req := &pbv1.CreateCheckinRequest{UserId: userID}
+	for _, t := range targets {
+		req.Targets = append(req.Targets, &pbv1.CheckinTarget{
+			RoomId:        t.RoomID,
+			VotesRequired: t.VotesRequired,
+		})
 	}
 	if geo != nil {
 		req.Proof = &pbv1.CreateCheckinRequest_Geo{Geo: &pbv1.GeoPoint{Lat: geo.Lat, Lon: geo.Lon}}
@@ -92,9 +112,59 @@ func (c *Client) Create(ctx context.Context, roomID, userID int64, votesRequired
 	}
 	resp, err := c.api.CreateCheckin(ctx, req)
 	if err != nil {
-		return Checkin{}, err
+		return nil, err
 	}
-	return fromPB(resp.GetCheckin()), nil
+	out := make([]Checkin, 0, len(resp.GetCheckins()))
+	for _, item := range resp.GetCheckins() {
+		out = append(out, fromPB(item))
+	}
+	return out, nil
+}
+
+// Photo is the decoded head of a photo stream: content type plus the bytes reader.
+type Photo struct {
+	ContentType string
+	Body        io.Reader
+}
+
+// OpenPhoto starts the server stream and reads the first chunk, which carries the
+// content type. The caller must have already authorized access to the checkin.
+func (c *Client) OpenPhoto(ctx context.Context, checkinID string) (Photo, error) {
+	stream, err := c.api.GetCheckinPhoto(ctx, &pbv1.GetCheckinPhotoRequest{CheckinId: checkinID})
+	if err != nil {
+		return Photo{}, err
+	}
+	first, err := stream.Recv()
+	if err != nil {
+		return Photo{}, err
+	}
+	return Photo{
+		ContentType: first.GetContentType(),
+		Body:        &photoReader{stream: stream, buf: first.GetData()},
+	}, nil
+}
+
+type photoReader struct {
+	stream grpc.ServerStreamingClient[pbv1.CheckinPhotoChunk]
+	buf    []byte
+	err    error
+}
+
+func (r *photoReader) Read(p []byte) (int, error) {
+	for len(r.buf) == 0 {
+		if r.err != nil {
+			return 0, r.err
+		}
+		chunk, err := r.stream.Recv()
+		if err != nil {
+			r.err = err
+			return 0, err
+		}
+		r.buf = chunk.GetData()
+	}
+	n := copy(p, r.buf)
+	r.buf = r.buf[n:]
+	return n, nil
 }
 
 func (c *Client) Get(ctx context.Context, id string) (Checkin, error) {

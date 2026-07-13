@@ -13,6 +13,8 @@ service CheckinService {
   rpc GetCheckin(GetCheckinRequest) returns (GetCheckinResponse);
   rpc ListRoomCheckins(ListRoomCheckinsRequest) returns (ListRoomCheckinsResponse);
   rpc CastVote(CastVoteRequest) returns (CastVoteResponse);
+  // photos are never public: core streams them to authorized room members
+  rpc GetCheckinPhoto(GetCheckinPhotoRequest) returns (stream CheckinPhotoChunk);
 }
 
 enum CheckinStatus {
@@ -33,28 +35,51 @@ message Checkin {
   int64 room_id = 2;
   int64 user_id = 3;
   CheckinStatus status = 4;
-  string photo_url = 5;
+  // object storage key, not a URL: the bucket stays private and core proxies the bytes
+  string photo_key = 5;
   GeoPoint geo = 6;
   int32 votes_approve = 7;
   int32 votes_reject = 8;
   int32 votes_required = 9;
   google.protobuf.Timestamp created_at = 10;
   google.protobuf.Timestamp expires_at = 11;
+  // photos are retained for a fixed window, then purged by a background job.
+  // a shared photo is only purged once every checkin using it has aged out.
+  google.protobuf.Timestamp photo_expires_at = 12;
+  bool photo_purged = 13;
 }
 
-message CreateCheckinRequest {
+// One room the proof is submitted to. Quorum is per room, so it travels with the target.
+message CheckinTarget {
   int64 room_id = 1;
-  int64 user_id = 2;
-  // quorum is decided by core from room settings
-  int32 votes_required = 3;
+  // decided by core from room settings
+  int32 votes_required = 2;
+}
+
+// One workout proof, submitted to one or more rooms at once. A photo is uploaded
+// once and shared by every checkin created from this request.
+message CreateCheckinRequest {
+  int64 user_id = 1;
+  repeated CheckinTarget targets = 2;
   oneof proof {
-    bytes photo = 4;
-    GeoPoint geo = 5;
+    bytes photo = 3;
+    GeoPoint geo = 4;
   }
 }
 
 message CreateCheckinResponse {
-  Checkin checkin = 1;
+  // one checkin per target, in the same order
+  repeated Checkin checkins = 1;
+}
+
+message GetCheckinPhotoRequest {
+  string checkin_id = 1;
+}
+
+message CheckinPhotoChunk {
+  bytes data = 1;
+  // sniffed on upload, sent on the first chunk only
+  string content_type = 2;
 }
 
 message GetCheckinRequest {

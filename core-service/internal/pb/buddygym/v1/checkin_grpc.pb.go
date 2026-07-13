@@ -22,6 +22,8 @@ type CheckinServiceClient interface {
 	GetCheckin(ctx context.Context, in *GetCheckinRequest, opts ...grpc.CallOption) (*GetCheckinResponse, error)
 	ListRoomCheckins(ctx context.Context, in *ListRoomCheckinsRequest, opts ...grpc.CallOption) (*ListRoomCheckinsResponse, error)
 	CastVote(ctx context.Context, in *CastVoteRequest, opts ...grpc.CallOption) (*CastVoteResponse, error)
+	// photos are never public: core streams them to authorized room members
+	GetCheckinPhoto(ctx context.Context, in *GetCheckinPhotoRequest, opts ...grpc.CallOption) (CheckinService_GetCheckinPhotoClient, error)
 }
 
 type checkinServiceClient struct {
@@ -68,6 +70,38 @@ func (c *checkinServiceClient) CastVote(ctx context.Context, in *CastVoteRequest
 	return out, nil
 }
 
+func (c *checkinServiceClient) GetCheckinPhoto(ctx context.Context, in *GetCheckinPhotoRequest, opts ...grpc.CallOption) (CheckinService_GetCheckinPhotoClient, error) {
+	stream, err := c.cc.NewStream(ctx, &CheckinService_ServiceDesc.Streams[0], "/buddygym.v1.CheckinService/GetCheckinPhoto", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &checkinServiceGetCheckinPhotoClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type CheckinService_GetCheckinPhotoClient interface {
+	Recv() (*CheckinPhotoChunk, error)
+	grpc.ClientStream
+}
+
+type checkinServiceGetCheckinPhotoClient struct {
+	grpc.ClientStream
+}
+
+func (x *checkinServiceGetCheckinPhotoClient) Recv() (*CheckinPhotoChunk, error) {
+	m := new(CheckinPhotoChunk)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // CheckinServiceServer is the server API for CheckinService service.
 // All implementations must embed UnimplementedCheckinServiceServer
 // for forward compatibility
@@ -76,6 +110,8 @@ type CheckinServiceServer interface {
 	GetCheckin(context.Context, *GetCheckinRequest) (*GetCheckinResponse, error)
 	ListRoomCheckins(context.Context, *ListRoomCheckinsRequest) (*ListRoomCheckinsResponse, error)
 	CastVote(context.Context, *CastVoteRequest) (*CastVoteResponse, error)
+	// photos are never public: core streams them to authorized room members
+	GetCheckinPhoto(*GetCheckinPhotoRequest, CheckinService_GetCheckinPhotoServer) error
 	mustEmbedUnimplementedCheckinServiceServer()
 }
 
@@ -94,6 +130,9 @@ func (UnimplementedCheckinServiceServer) ListRoomCheckins(context.Context, *List
 }
 func (UnimplementedCheckinServiceServer) CastVote(context.Context, *CastVoteRequest) (*CastVoteResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CastVote not implemented")
+}
+func (UnimplementedCheckinServiceServer) GetCheckinPhoto(*GetCheckinPhotoRequest, CheckinService_GetCheckinPhotoServer) error {
+	return status.Errorf(codes.Unimplemented, "method GetCheckinPhoto not implemented")
 }
 func (UnimplementedCheckinServiceServer) mustEmbedUnimplementedCheckinServiceServer() {}
 
@@ -180,6 +219,27 @@ func _CheckinService_CastVote_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CheckinService_GetCheckinPhoto_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(GetCheckinPhotoRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(CheckinServiceServer).GetCheckinPhoto(m, &checkinServiceGetCheckinPhotoServer{stream})
+}
+
+type CheckinService_GetCheckinPhotoServer interface {
+	Send(*CheckinPhotoChunk) error
+	grpc.ServerStream
+}
+
+type checkinServiceGetCheckinPhotoServer struct {
+	grpc.ServerStream
+}
+
+func (x *checkinServiceGetCheckinPhotoServer) Send(m *CheckinPhotoChunk) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 // CheckinService_ServiceDesc is the grpc.ServiceDesc for CheckinService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -204,6 +264,12 @@ var CheckinService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _CheckinService_CastVote_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "GetCheckinPhoto",
+			Handler:       _CheckinService_GetCheckinPhoto_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "buddygym/v1/checkin.proto",
 }

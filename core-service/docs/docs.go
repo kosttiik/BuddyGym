@@ -73,6 +73,159 @@ const docTemplate = `{
                 }
             }
         },
+        "/checkins": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Submits one workout proof to every listed room. A photo is uploaded once and shared by all of them, so posting to several rooms never stores it twice. Send multipart/form-data with a \"photo\" file (up to 10 MB) and repeated \"room_ids\" fields, or JSON with a geo point and room_ids for the fast path. The caller must be a member of every room.",
+                "consumes": [
+                    "multipart/form-data",
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "checkins"
+                ],
+                "summary": "Create a checkin in one or more rooms",
+                "parameters": [
+                    {
+                        "type": "file",
+                        "description": "workout photo",
+                        "name": "photo",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "rooms to submit to",
+                        "name": "room_ids",
+                        "in": "formData"
+                    },
+                    {
+                        "description": "geo proof (json variant)",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.CreateCheckinGeoRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/checkin.Checkin"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/checkins/{id}/photo": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Streams the proof photo. The object storage bucket is private: only members of the room the checkin belongs to can read it, and the bytes are proxied through core-service. Requires a Bearer token, so browsers must fetch it via XHR rather than a plain \u003cimg src\u003e.",
+                "produces": [
+                    "image/jpeg",
+                    "image/png"
+                ],
+                "tags": [
+                    "checkins"
+                ],
+                "summary": "Download a checkin photo",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "checkin id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/checkins/{id}/vote": {
             "post": {
                 "security": [
@@ -583,86 +736,6 @@ const docTemplate = `{
                         }
                     }
                 }
-            },
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Submits workout proof to checkin-service. Send multipart/form-data with a \"photo\" file (up to 10 MB), or JSON with a geo point for the fast path.",
-                "consumes": [
-                    "multipart/form-data",
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "checkins"
-                ],
-                "summary": "Create a checkin",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "room id",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "file",
-                        "description": "workout photo",
-                        "name": "photo",
-                        "in": "formData"
-                    },
-                    {
-                        "description": "geo proof (json variant)",
-                        "name": "body",
-                        "in": "body",
-                        "schema": {
-                            "$ref": "#/definitions/httpapi.CreateCheckinGeoRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "$ref": "#/definitions/checkin.Checkin"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/httpapi.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/httpapi.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/httpapi.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/httpapi.ErrorResponse"
-                        }
-                    },
-                    "502": {
-                        "description": "Bad Gateway",
-                        "schema": {
-                            "$ref": "#/definitions/httpapi.ErrorResponse"
-                        }
-                    }
-                }
             }
         },
         "/rooms/{id}/join": {
@@ -855,11 +928,19 @@ const docTemplate = `{
                 "geo": {
                     "$ref": "#/definitions/checkin.Geo"
                 },
+                "has_photo": {
+                    "description": "the storage key never leaves core; clients fetch bytes from /checkins/{id}/photo",
+                    "type": "boolean"
+                },
                 "id": {
                     "type": "string"
                 },
-                "photo_url": {
+                "photo_expires_at": {
                     "type": "string"
+                },
+                "photo_purged": {
+                    "description": "photos are purged after a retention window; once purged the bytes are gone for good",
+                    "type": "boolean"
                 },
                 "room_id": {
                     "type": "integer"
@@ -1062,6 +1143,12 @@ const docTemplate = `{
             "properties": {
                 "geo": {
                     "$ref": "#/definitions/checkin.Geo"
+                },
+                "room_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
                 }
             }
         },

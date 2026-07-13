@@ -1,6 +1,7 @@
 package httpapi_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"time"
@@ -133,27 +134,63 @@ type fakeCheckins struct {
 	checkins map[string]checkin.Checkin
 	nextID   int
 	err      error
+	// object storage stand-in: key -> bytes, to prove one photo is stored once
+	photos    map[string][]byte
+	photoKeys map[string]string
+	nextPhoto int
 }
 
 func newFakeCheckins() *fakeCheckins {
-	return &fakeCheckins{checkins: map[string]checkin.Checkin{}}
+	return &fakeCheckins{
+		checkins:  map[string]checkin.Checkin{},
+		photos:    map[string][]byte{},
+		photoKeys: map[string]string{},
+	}
 }
 
-func (f *fakeCheckins) Create(_ context.Context, roomID, userID int64, votesRequired int32, photo []byte, geo *checkin.Geo) (checkin.Checkin, error) {
+func (f *fakeCheckins) Create(_ context.Context, userID int64, targets []checkin.Target, photo []byte, geo *checkin.Geo) ([]checkin.Checkin, error) {
 	if f.err != nil {
-		return checkin.Checkin{}, f.err
+		return nil, f.err
 	}
-	f.nextID++
-	c := checkin.Checkin{
-		ID: fmt.Sprintf("chk-%d", f.nextID), RoomID: roomID, UserID: userID,
-		Status: "pending", Geo: geo, VotesRequired: votesRequired,
-		CreatedAt: time.Now(), ExpiresAt: time.Now().Add(24 * time.Hour),
-	}
+
+	var photoKey string
 	if len(photo) > 0 {
-		c.PhotoURL = "https://storage/photo.jpg"
+		f.nextPhoto++
+		photoKey = fmt.Sprintf("checkins/photo-%d", f.nextPhoto)
+		f.photos[photoKey] = photo
 	}
-	f.checkins[c.ID] = c
-	return c, nil
+
+	out := make([]checkin.Checkin, 0, len(targets))
+	for _, t := range targets {
+		f.nextID++
+		c := checkin.Checkin{
+			ID: fmt.Sprintf("chk-%d", f.nextID), RoomID: t.RoomID, UserID: userID,
+			Status: "pending", Geo: geo, VotesRequired: t.VotesRequired,
+			HasPhoto:  photoKey != "",
+			CreatedAt: time.Now(), ExpiresAt: time.Now().Add(24 * time.Hour),
+		}
+		if geo != nil {
+			c.Status = "approved"
+		}
+		f.checkins[c.ID] = c
+		f.photoKeys[c.ID] = photoKey
+		out = append(out, c)
+	}
+	return out, nil
+}
+
+func (f *fakeCheckins) OpenPhoto(_ context.Context, checkinID string) (checkin.Photo, error) {
+	if f.err != nil {
+		return checkin.Photo{}, f.err
+	}
+	key, ok := f.photoKeys[checkinID]
+	if !ok || key == "" {
+		return checkin.Photo{}, status.Error(codes.NotFound, "photo not found")
+	}
+	return checkin.Photo{
+		ContentType: "image/png",
+		Body:        bytes.NewReader(f.photos[key]),
+	}, nil
 }
 
 func (f *fakeCheckins) Get(_ context.Context, id string) (checkin.Checkin, error) {

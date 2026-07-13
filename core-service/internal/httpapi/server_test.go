@@ -15,6 +15,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -400,53 +401,185 @@ func TestJoinAndLeave(t *testing.T) {
 func TestCreateCheckinGeo(t *testing.T) {
 	e := newEnv()
 	room := e.createRoom(t, 1, domain.RoomOpen)
-	path := fmt.Sprintf("/api/v1/rooms/%d/checkins", room.ID)
 
-	rec := e.do(t, "POST", path, httpapi.CreateCheckinGeoRequest{Geo: checkin.Geo{Lat: 55.75, Lon: 37.61}}, reqOpts{userID: 1})
+	rec := e.do(t, "POST", "/api/v1/checkins", httpapi.CreateCheckinGeoRequest{
+		RoomIDs: []int64{room.ID}, Geo: checkin.Geo{Lat: 55.75, Lon: 37.61},
+	}, reqOpts{userID: 1})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("geo checkin: %d %s", rec.Code, rec.Body.String())
 	}
-	c := decode[checkin.Checkin](t, rec)
-	if c.Status != "pending" || c.VotesRequired != 2 || c.Geo == nil {
-		t.Errorf("unexpected checkin: %+v", c)
+	list := decode[[]checkin.Checkin](t, rec)
+	if len(list) != 1 || list[0].VotesRequired != 2 || list[0].Geo == nil {
+		t.Errorf("unexpected checkin: %+v", list)
 	}
 
-	rec = e.do(t, "POST", path, httpapi.CreateCheckinGeoRequest{Geo: checkin.Geo{Lat: 99, Lon: 0}}, reqOpts{userID: 1})
+	rec = e.do(t, "POST", "/api/v1/checkins", httpapi.CreateCheckinGeoRequest{
+		RoomIDs: []int64{room.ID}, Geo: checkin.Geo{Lat: 99, Lon: 0},
+	}, reqOpts{userID: 1})
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("bad geo: %d", rec.Code)
 	}
-	rec = e.do(t, "POST", path, httpapi.CreateCheckinGeoRequest{Geo: checkin.Geo{Lat: 55, Lon: 37}}, reqOpts{userID: 2})
+	rec = e.do(t, "POST", "/api/v1/checkins", httpapi.CreateCheckinGeoRequest{
+		RoomIDs: []int64{room.ID}, Geo: checkin.Geo{Lat: 55, Lon: 37},
+	}, reqOpts{userID: 2})
 	if rec.Code != http.StatusForbidden {
 		t.Errorf("non-member checkin: %d", rec.Code)
 	}
+	rec = e.do(t, "POST", "/api/v1/checkins", httpapi.CreateCheckinGeoRequest{
+		RoomIDs: nil, Geo: checkin.Geo{Lat: 55, Lon: 37},
+	}, reqOpts{userID: 1})
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("no rooms: %d", rec.Code)
+	}
+}
+
+func photoForm(t *testing.T, content []byte, roomIDs ...int64) (*bytes.Buffer, string) {
+	t.Helper()
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	fw, err := mw.CreateFormFile("photo", "gym.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fw.Write(content); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range roomIDs {
+		if err := mw.WriteField("room_ids", strconv.FormatInt(id, 10)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return &buf, mw.FormDataContentType()
 }
 
 func TestCreateCheckinPhoto(t *testing.T) {
 	e := newEnv()
 	room := e.createRoom(t, 1, domain.RoomOpen)
-	path := fmt.Sprintf("/api/v1/rooms/%d/checkins", room.ID)
 
-	var buf bytes.Buffer
-	mw := multipart.NewWriter(&buf)
-	fw, _ := mw.CreateFormFile("photo", "gym.jpg")
-	fw.Write([]byte("fake-jpeg-bytes"))
-	mw.Close()
-
-	rec := e.do(t, "POST", path, &buf, reqOpts{userID: 1, contentType: mw.FormDataContentType()})
+	buf, ct := photoForm(t, pngBytes, room.ID)
+	rec := e.do(t, "POST", "/api/v1/checkins", buf, reqOpts{userID: 1, contentType: ct})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("photo checkin: %d %s", rec.Code, rec.Body.String())
 	}
-	if c := decode[checkin.Checkin](t, rec); c.PhotoURL == "" {
-		t.Errorf("photo url missing: %+v", c)
+	list := decode[[]checkin.Checkin](t, rec)
+	if len(list) != 1 || !list[0].HasPhoto {
+		t.Errorf("photo flag missing: %+v", list)
 	}
 
 	var empty bytes.Buffer
 	mw2 := multipart.NewWriter(&empty)
 	mw2.WriteField("other", "x")
 	mw2.Close()
-	rec = e.do(t, "POST", path, &empty, reqOpts{userID: 1, contentType: mw2.FormDataContentType()})
+	rec = e.do(t, "POST", "/api/v1/checkins", &empty, reqOpts{userID: 1, contentType: mw2.FormDataContentType()})
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("missing photo field: %d", rec.Code)
+	}
+}
+
+// One proof submitted to several rooms must produce one checkin per room while the
+// photo itself is uploaded exactly once.
+func TestCreateCheckinAcrossRoomsStoresPhotoOnce(t *testing.T) {
+	e := newEnv()
+	first := e.createRoom(t, 1, domain.RoomOpen)
+	second := e.createRoom(t, 1, domain.RoomOpen)
+	third := e.createRoom(t, 1, domain.RoomOpen)
+
+	buf, ct := photoForm(t, pngBytes, first.ID, second.ID, third.ID)
+	rec := e.do(t, "POST", "/api/v1/checkins", buf, reqOpts{userID: 1, contentType: ct})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("multi-room checkin: %d %s", rec.Code, rec.Body.String())
+	}
+
+	list := decode[[]checkin.Checkin](t, rec)
+	if len(list) != 3 {
+		t.Fatalf("want 3 checkins, got %d", len(list))
+	}
+	if got := []int64{list[0].RoomID, list[1].RoomID, list[2].RoomID}; got[0] != first.ID || got[1] != second.ID || got[2] != third.ID {
+		t.Errorf("rooms out of order: %v", got)
+	}
+	if len(e.checkins.photos) != 1 {
+		t.Errorf("photo stored %d times, want 1", len(e.checkins.photos))
+	}
+}
+
+// Membership is checked for every room, so a member of one room cannot slip a
+// checkin into a room they do not belong to.
+func TestCreateCheckinRejectsRoomsUserIsNotIn(t *testing.T) {
+	e := newEnv()
+	mine := e.createRoom(t, 1, domain.RoomOpen)
+	stranger := e.createRoom(t, 99, domain.RoomOpen)
+
+	buf, ct := photoForm(t, pngBytes, mine.ID, stranger.ID)
+	rec := e.do(t, "POST", "/api/v1/checkins", buf, reqOpts{userID: 1, contentType: ct})
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("want 403 for foreign room, got %d", rec.Code)
+	}
+	if len(e.checkins.checkins) != 0 {
+		t.Errorf("no checkin may be created when one room is rejected")
+	}
+}
+
+func TestCreateCheckinRejectsDuplicateRooms(t *testing.T) {
+	e := newEnv()
+	room := e.createRoom(t, 1, domain.RoomOpen)
+
+	buf, ct := photoForm(t, pngBytes, room.ID, room.ID)
+	if rec := e.do(t, "POST", "/api/v1/checkins", buf, reqOpts{userID: 1, contentType: ct}); rec.Code != http.StatusBadRequest {
+		t.Errorf("duplicate room: %d, want 400", rec.Code)
+	}
+}
+
+// A declared image content type proves nothing: the bytes must actually be an image,
+// otherwise an SVG or HTML payload could be stored and later served as active content.
+func TestCreateCheckinRejectsNonImagePayload(t *testing.T) {
+	e := newEnv()
+	room := e.createRoom(t, 1, domain.RoomOpen)
+
+	for name, payload := range map[string][]byte{
+		"svg":   []byte(`<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>`),
+		"html":  []byte("<!DOCTYPE html><script>alert(1)</script>"),
+		"plain": []byte("fake-jpeg-bytes"),
+	} {
+		buf, ct := photoForm(t, payload, room.ID)
+		rec := e.do(t, "POST", "/api/v1/checkins", buf, reqOpts{userID: 1, contentType: ct})
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("%s payload accepted: %d, want 400", name, rec.Code)
+		}
+	}
+}
+
+func TestGetCheckinPhotoRequiresMembership(t *testing.T) {
+	e := newEnv()
+	room := e.createRoom(t, 1, domain.RoomOpen)
+	e.do(t, "POST", fmt.Sprintf("/api/v1/rooms/%d/join", room.ID), nil, reqOpts{userID: 2})
+
+	buf, ct := photoForm(t, pngBytes, room.ID)
+	rec := e.do(t, "POST", "/api/v1/checkins", buf, reqOpts{userID: 1, contentType: ct})
+	created := decode[[]checkin.Checkin](t, rec)[0]
+	path := "/api/v1/checkins/" + created.ID + "/photo"
+
+	rec = e.do(t, "GET", path, nil, reqOpts{userID: 2})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("member fetch: %d %s", rec.Code, rec.Body.String())
+	}
+	if !bytes.Equal(rec.Body.Bytes(), pngBytes) {
+		t.Errorf("photo bytes mismatch")
+	}
+	if got := rec.Header().Get("Content-Type"); got != "image/png" {
+		t.Errorf("content type = %q", got)
+	}
+	if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Errorf("nosniff missing: %q", got)
+	}
+
+	if rec := e.do(t, "GET", path, nil, reqOpts{userID: 77}); rec.Code != http.StatusForbidden {
+		t.Errorf("stranger photo fetch: %d, want 403", rec.Code)
+	}
+	if rec := e.do(t, "GET", path, nil, reqOpts{noAuth: true}); rec.Code != http.StatusUnauthorized {
+		t.Errorf("anonymous photo fetch: %d, want 401", rec.Code)
 	}
 }
 
@@ -455,7 +588,9 @@ func TestListCheckins(t *testing.T) {
 	room := e.createRoom(t, 1, domain.RoomOpen)
 	path := fmt.Sprintf("/api/v1/rooms/%d/checkins", room.ID)
 
-	e.do(t, "POST", path, httpapi.CreateCheckinGeoRequest{Geo: checkin.Geo{Lat: 55, Lon: 37}}, reqOpts{userID: 1})
+	e.do(t, "POST", "/api/v1/checkins", httpapi.CreateCheckinGeoRequest{
+		RoomIDs: []int64{room.ID}, Geo: checkin.Geo{Lat: 55, Lon: 37},
+	}, reqOpts{userID: 1})
 
 	rec := e.do(t, "GET", path, nil, reqOpts{userID: 1})
 	if rec.Code != http.StatusOK {
@@ -481,9 +616,10 @@ func TestVote(t *testing.T) {
 	room := e.createRoom(t, 1, domain.RoomOpen)
 	e.do(t, "POST", fmt.Sprintf("/api/v1/rooms/%d/join", room.ID), nil, reqOpts{userID: 2})
 
-	rec := e.do(t, "POST", fmt.Sprintf("/api/v1/rooms/%d/checkins", room.ID),
-		httpapi.CreateCheckinGeoRequest{Geo: checkin.Geo{Lat: 55, Lon: 37}}, reqOpts{userID: 1})
-	c := decode[checkin.Checkin](t, rec)
+	rec := e.do(t, "POST", "/api/v1/checkins", httpapi.CreateCheckinGeoRequest{
+		RoomIDs: []int64{room.ID}, Geo: checkin.Geo{Lat: 55, Lon: 37},
+	}, reqOpts{userID: 1})
+	c := decode[[]checkin.Checkin](t, rec)[0]
 	votePath := "/api/v1/checkins/" + c.ID + "/vote"
 
 	rec = e.do(t, "POST", votePath, httpapi.VoteRequest{Approve: true}, reqOpts{userID: 2})
@@ -513,9 +649,20 @@ func TestCheckinServiceDown(t *testing.T) {
 	room := e.createRoom(t, 1, domain.RoomOpen)
 	e.checkins.err = status.Error(codes.Unavailable, "connection refused")
 
-	rec := e.do(t, "POST", fmt.Sprintf("/api/v1/rooms/%d/checkins", room.ID),
-		httpapi.CreateCheckinGeoRequest{Geo: checkin.Geo{Lat: 55, Lon: 37}}, reqOpts{userID: 1})
+	rec := e.do(t, "POST", "/api/v1/checkins", httpapi.CreateCheckinGeoRequest{
+		RoomIDs: []int64{room.ID}, Geo: checkin.Geo{Lat: 55, Lon: 37},
+	}, reqOpts{userID: 1})
 	if rec.Code != http.StatusBadGateway {
 		t.Errorf("unavailable mapping: %d, want 502", rec.Code)
 	}
+}
+
+// smallest valid PNG; photo validation sniffs magic bytes, not the declared type
+var pngBytes = []byte{
+	0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+	0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+	0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00,
+	0x0a, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x00, 0x01, 0x00, 0x00,
+	0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49,
+	0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
 }

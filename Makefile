@@ -11,10 +11,7 @@ proto:
 		$(PROTO_FILES)
 
 proto-py:
-	python3 -m grpc_tools.protoc -I $(PROTO_DIR) \
-		--python_out=checkin-service/app/pb \
-		--grpc_python_out=checkin-service/app/pb \
-		$(PROTO_FILES)
+	cd checkin-service && $(MAKE) proto-py
 
 # swag version is pinned by core-service/go.mod
 swagger:
