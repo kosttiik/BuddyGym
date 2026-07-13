@@ -21,11 +21,14 @@ func NewRooms(pool *pgxpool.Pool) *Rooms {
 
 const roomColumns = "id, name, kind, invite_code, goal_per_period, period_days, votes_required, creator_id, created_at"
 
-// counter is zeroed on read once the room period has rolled over;
-// the row itself is reset lazily on the next approved checkin
 const periodAwareCount = `
 	CASE WHEN now() >= m.period_start + r.period_days * interval '1 day'
-	     THEN 0 ELSE m.workouts_count END`
+	     THEN 0 ELSE (
+		SELECT count(DISTINCT (cr.applied_at AT TIME ZONE 'UTC')::date)::int
+		FROM checkin_results cr
+		WHERE cr.room_id = m.room_id AND cr.user_id = m.user_id
+		  AND cr.status = 'approved' AND cr.applied_at >= m.period_start
+	) END`
 
 func scanRoom(row pgx.Row) (domain.Room, error) {
 	var rm domain.Room

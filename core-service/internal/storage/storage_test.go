@@ -347,3 +347,21 @@ func TestResultsWorkoutDays(t *testing.T) {
 		}
 	}
 }
+
+func TestResultsPeriodCountCollapsesSameDayCheckins(t *testing.T) {
+	ctx := context.Background()
+	results := storage.NewResults(pool(t))
+	mustUser(t, 110)
+	room := mustRoom(t, 110)
+
+	for _, id := range []string{"chk-same-day-1", "chk-same-day-2"} {
+		if _, err := results.Apply(ctx, id, room.ID, 110, storage.ResultApproved); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	count, err := results.PeriodCount(ctx, room.ID, 110)
+	if err != nil || count != 1 {
+		t.Errorf("PeriodCount = %d (%v), want 1", count, err)
+	}
+}
