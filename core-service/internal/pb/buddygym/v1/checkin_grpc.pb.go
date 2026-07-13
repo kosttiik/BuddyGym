@@ -24,6 +24,8 @@ type CheckinServiceClient interface {
 	CastVote(ctx context.Context, in *CastVoteRequest, opts ...grpc.CallOption) (*CastVoteResponse, error)
 	// photos are never public: core streams them to authorized room members
 	GetCheckinPhoto(ctx context.Context, in *GetCheckinPhotoRequest, opts ...grpc.CallOption) (CheckinService_GetCheckinPhotoClient, error)
+	// core calls this when a room is gone for good
+	PurgeRoom(ctx context.Context, in *PurgeRoomRequest, opts ...grpc.CallOption) (*PurgeRoomResponse, error)
 }
 
 type checkinServiceClient struct {
@@ -102,6 +104,15 @@ func (x *checkinServiceGetCheckinPhotoClient) Recv() (*CheckinPhotoChunk, error)
 	return m, nil
 }
 
+func (c *checkinServiceClient) PurgeRoom(ctx context.Context, in *PurgeRoomRequest, opts ...grpc.CallOption) (*PurgeRoomResponse, error) {
+	out := new(PurgeRoomResponse)
+	err := c.cc.Invoke(ctx, "/buddygym.v1.CheckinService/PurgeRoom", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CheckinServiceServer is the server API for CheckinService service.
 // All implementations must embed UnimplementedCheckinServiceServer
 // for forward compatibility
@@ -112,6 +123,8 @@ type CheckinServiceServer interface {
 	CastVote(context.Context, *CastVoteRequest) (*CastVoteResponse, error)
 	// photos are never public: core streams them to authorized room members
 	GetCheckinPhoto(*GetCheckinPhotoRequest, CheckinService_GetCheckinPhotoServer) error
+	// core calls this when a room is gone for good
+	PurgeRoom(context.Context, *PurgeRoomRequest) (*PurgeRoomResponse, error)
 	mustEmbedUnimplementedCheckinServiceServer()
 }
 
@@ -133,6 +146,9 @@ func (UnimplementedCheckinServiceServer) CastVote(context.Context, *CastVoteRequ
 }
 func (UnimplementedCheckinServiceServer) GetCheckinPhoto(*GetCheckinPhotoRequest, CheckinService_GetCheckinPhotoServer) error {
 	return status.Errorf(codes.Unimplemented, "method GetCheckinPhoto not implemented")
+}
+func (UnimplementedCheckinServiceServer) PurgeRoom(context.Context, *PurgeRoomRequest) (*PurgeRoomResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PurgeRoom not implemented")
 }
 func (UnimplementedCheckinServiceServer) mustEmbedUnimplementedCheckinServiceServer() {}
 
@@ -240,6 +256,24 @@ func (x *checkinServiceGetCheckinPhotoServer) Send(m *CheckinPhotoChunk) error {
 	return x.ServerStream.SendMsg(m)
 }
 
+func _CheckinService_PurgeRoom_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PurgeRoomRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CheckinServiceServer).PurgeRoom(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/buddygym.v1.CheckinService/PurgeRoom",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CheckinServiceServer).PurgeRoom(ctx, req.(*PurgeRoomRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CheckinService_ServiceDesc is the grpc.ServiceDesc for CheckinService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -262,6 +296,10 @@ var CheckinService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CastVote",
 			Handler:    _CheckinService_CastVote_Handler,
+		},
+		{
+			MethodName: "PurgeRoom",
+			Handler:    _CheckinService_PurgeRoom_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

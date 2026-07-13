@@ -198,3 +198,10 @@ func (c *Client) Vote(ctx context.Context, checkinID string, voterID int64, appr
 	}
 	return fromPB(resp.GetCheckin()), nil
 }
+
+// PurgeRoom removes every checkin of a deleted room. Photos shared with a room that is
+// still alive are kept.
+func (c *Client) PurgeRoom(ctx context.Context, roomID int64) error {
+	_, err := c.api.PurgeRoom(ctx, &pbv1.PurgeRoomRequest{RoomId: roomID})
+	return err
+}

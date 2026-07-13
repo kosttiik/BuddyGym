@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -81,12 +82,12 @@ func (r *Rooms) tryCreate(ctx context.Context, room domain.Room) (domain.Room, e
 
 func (r *Rooms) Get(ctx context.Context, id int64) (domain.Room, error) {
 	return scanRoom(r.pool.QueryRow(ctx,
-		"SELECT "+roomColumns+" FROM rooms WHERE id = $1", id))
+		"SELECT "+roomColumns+" FROM rooms WHERE id = $1 AND deleted_at IS NULL", id))
 }
 
 func (r *Rooms) GetByInvite(ctx context.Context, code string) (domain.Room, error) {
 	return scanRoom(r.pool.QueryRow(ctx,
-		"SELECT "+roomColumns+" FROM rooms WHERE invite_code = $1", code))
+		"SELECT "+roomColumns+" FROM rooms WHERE invite_code = $1 AND deleted_at IS NULL", code))
 }
 
 func (r *Rooms) Update(ctx context.Context, room domain.Room) (domain.Room, error) {
@@ -115,7 +116,7 @@ func (r *Rooms) ListByUser(ctx context.Context, userID int64) ([]domain.RoomWith
 		       (SELECT count(*) FROM memberships m2 WHERE m2.room_id = r.id)
 		FROM memberships m
 		JOIN rooms r ON r.id = m.room_id
-		WHERE m.user_id = $1
+		WHERE m.user_id = $1 AND r.deleted_at IS NULL
 		ORDER BY m.joined_at`, userID)
 	if err != nil {
 		return nil, err
@@ -139,7 +140,7 @@ func (r *Rooms) ListOpen(ctx context.Context) ([]domain.Room, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT `+roomColumns+`
 		FROM rooms
-		WHERE kind = $1
+		WHERE kind = $1 AND deleted_at IS NULL
 		ORDER BY created_at DESC`, domain.RoomOpen)
 	if err != nil {
 		return nil, err
@@ -210,8 +211,16 @@ func (r *Rooms) Join(ctx context.Context, roomID, userID int64) error {
 	return err
 }
 
+// Leave drops the membership and, when it was the last one, marks the room for deletion.
+// The row is kept for a grace period so the checkin service can purge its photos first.
 func (r *Rooms) Leave(ctx context.Context, roomID, userID int64) error {
-	tag, err := r.pool.Exec(ctx,
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	tag, err := tx.Exec(ctx,
 		"DELETE FROM memberships WHERE room_id = $1 AND user_id = $2", roomID, userID)
 	if err != nil {
 		return err
@@ -219,5 +228,41 @@ func (r *Rooms) Leave(ctx context.Context, roomID, userID int64) error {
 	if tag.RowsAffected() == 0 {
 		return ErrNotFound
 	}
-	return nil
+
+	if _, err := tx.Exec(ctx, `
+		UPDATE rooms SET deleted_at = now()
+		WHERE id = $1
+		  AND deleted_at IS NULL
+		  AND NOT EXISTS (SELECT 1 FROM memberships WHERE room_id = $1)`, roomID); err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
+// ListDeletedBefore returns rooms whose grace period has run out.
+func (r *Rooms) ListDeletedBefore(ctx context.Context, cutoff time.Time, limit int) ([]int64, error) {
+	rows, err := r.pool.Query(ctx,
+		"SELECT id FROM rooms WHERE deleted_at IS NOT NULL AND deleted_at <= $1 ORDER BY deleted_at LIMIT $2",
+		cutoff, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// Purge erases a room for good. Memberships and results go with it by cascade.
+func (r *Rooms) Purge(ctx context.Context, roomID int64) error {
+	_, err := r.pool.Exec(ctx, "DELETE FROM rooms WHERE id = $1 AND deleted_at IS NOT NULL", roomID)
+	return err
 }

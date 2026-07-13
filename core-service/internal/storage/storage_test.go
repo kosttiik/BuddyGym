@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -363,5 +364,65 @@ func TestResultsPeriodCountCollapsesSameDayCheckins(t *testing.T) {
 	count, err := results.PeriodCount(ctx, room.ID, 110)
 	if err != nil || count != 1 {
 		t.Errorf("PeriodCount = %d (%v), want 1", count, err)
+	}
+}
+
+// The last member walking out kills the room: it disappears from every read path right
+// away, but the row lingers so the checkin side can still purge its photos.
+func TestRoomIsMarkedDeletedWhenTheLastMemberLeaves(t *testing.T) {
+	ctx := context.Background()
+	rooms := storage.NewRooms(pool(t))
+	mustUser(t, 140)
+	mustUser(t, 141)
+	room := mustRoom(t, 140)
+
+	if err := rooms.Join(ctx, room.ID, 141); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := rooms.Leave(ctx, room.ID, 141); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rooms.Get(ctx, room.ID); err != nil {
+		t.Fatalf("a room with members left must stay visible: %v", err)
+	}
+
+	if err := rooms.Leave(ctx, room.ID, 140); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := rooms.Get(ctx, room.ID); !errors.Is(err, storage.ErrNotFound) {
+		t.Errorf("emptied room still readable: %v", err)
+	}
+	if _, err := rooms.GetByInvite(ctx, room.InviteCode); !errors.Is(err, storage.ErrNotFound) {
+		t.Errorf("emptied room still joinable by code: %v", err)
+	}
+	list, err := rooms.ListByUser(ctx, 140)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range list {
+		if r.ID == room.ID {
+			t.Error("emptied room still listed")
+		}
+	}
+
+	ids, err := rooms.ListDeletedBefore(ctx, time.Now().Add(time.Minute), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(ids, room.ID) {
+		t.Errorf("room not queued for purging: %v", ids)
+	}
+
+	if err := rooms.Purge(ctx, room.ID); err != nil {
+		t.Fatal(err)
+	}
+	ids, err = rooms.ListDeletedBefore(ctx, time.Now().Add(time.Minute), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if slices.Contains(ids, room.ID) {
+		t.Error("purged room still queued")
 	}
 }
