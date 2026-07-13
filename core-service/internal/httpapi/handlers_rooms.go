@@ -220,6 +220,29 @@ func (s *Server) handleListRooms(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, rooms)
 }
 
+// handleListOpenRooms godoc
+//
+//	@Summary		List open rooms
+//	@Description	Rooms anyone can join. Invite codes are not returned.
+//	@Tags			rooms
+//	@Security		BearerAuth
+//	@Produce		json
+//	@Success		200	{array}		domain.Room
+//	@Failure		401	{object}	ErrorResponse
+//	@Failure		500	{object}	ErrorResponse
+//	@Router			/rooms/open [get]
+func (s *Server) handleListOpenRooms(w http.ResponseWriter, r *http.Request) {
+	rooms, err := s.rooms.ListOpen(r.Context())
+	if err != nil {
+		s.internal(w, err)
+		return
+	}
+	if rooms == nil {
+		rooms = []domain.Room{}
+	}
+	writeJSON(w, http.StatusOK, rooms)
+}
+
 // handleGetRoom godoc
 //
 //	@Summary		Get room details

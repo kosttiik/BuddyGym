@@ -121,6 +121,17 @@ func (f *fakeRooms) ListByUser(_ context.Context, userID int64) ([]domain.RoomWi
 	return out, nil
 }
 
+func (f *fakeRooms) ListOpen(_ context.Context) ([]domain.Room, error) {
+	var out []domain.Room
+	for _, room := range f.rooms {
+		if room.Kind == domain.RoomOpen {
+			room.InviteCode = ""
+			out = append(out, room)
+		}
+	}
+	return out, nil
+}
+
 func (f *fakeRooms) Members(_ context.Context, roomID int64) ([]domain.Member, error) {
 	var out []domain.Member
 	for uid, joined := range f.members[roomID] {

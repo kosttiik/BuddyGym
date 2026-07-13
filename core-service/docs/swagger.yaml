@@ -924,6 +924,31 @@ paths:
       summary: Join a room by invite code
       tags:
       - rooms
+  /rooms/open:
+    get:
+      description: Rooms anyone can join. Invite codes are not returned.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/domain.Room'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List open rooms
+      tags:
+      - rooms
   /users/{id}:
     get:
       description: Public profile of any user by id, with achievements.

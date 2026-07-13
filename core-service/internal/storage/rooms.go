@@ -132,6 +132,30 @@ func (r *Rooms) ListByUser(ctx context.Context, userID int64) ([]domain.RoomWith
 	return out, rows.Err()
 }
 
+func (r *Rooms) ListOpen(ctx context.Context) ([]domain.Room, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT `+roomColumns+`
+		FROM rooms
+		WHERE kind = $1
+		ORDER BY created_at DESC`, domain.RoomOpen)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []domain.Room
+	for rows.Next() {
+		var room domain.Room
+		if err := rows.Scan(&room.ID, &room.Name, &room.Kind, &room.InviteCode, &room.GoalPerPeriod,
+			&room.PeriodDays, &room.VotesRequired, &room.CreatorID, &room.CreatedAt); err != nil {
+			return nil, err
+		}
+		room.InviteCode = ""
+		out = append(out, room)
+	}
+	return out, rows.Err()
+}
+
 func (r *Rooms) Members(ctx context.Context, roomID int64) ([]domain.Member, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT u.id, u.username, u.first_name, u.photo_url, u.theme, u.status, u.created_at,

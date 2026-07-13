@@ -27,6 +27,7 @@ type RoomsRepo interface {
 	Update(ctx context.Context, room domain.Room) (domain.Room, error)
 	Delete(ctx context.Context, id int64) error
 	ListByUser(ctx context.Context, userID int64) ([]domain.RoomWithProgress, error)
+	ListOpen(ctx context.Context) ([]domain.Room, error)
 	Members(ctx context.Context, roomID int64) ([]domain.Member, error)
 	IsMember(ctx context.Context, roomID, userID int64) (bool, error)
 	Join(ctx context.Context, roomID, userID int64) error
@@ -121,6 +122,7 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("POST /api/v1/rooms", s.withAuth(s.handleCreateRoom))
 	mux.HandleFunc("GET /api/v1/rooms", s.withAuth(s.handleListRooms))
+	mux.HandleFunc("GET /api/v1/rooms/open", s.withAuth(s.handleListOpenRooms))
 	mux.HandleFunc("GET /api/v1/rooms/{id}", s.withAuth(s.handleGetRoom))
 	mux.HandleFunc("PATCH /api/v1/rooms/{id}", s.withAuth(s.handleUpdateRoom))
 	mux.HandleFunc("DELETE /api/v1/rooms/{id}", s.withAuth(s.handleDeleteRoom))

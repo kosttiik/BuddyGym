@@ -329,6 +329,17 @@ func TestListRooms(t *testing.T) {
 	}
 }
 
+func TestListOpenRooms(t *testing.T) {
+	e := newEnv()
+	open := e.createRoom(t, 1, domain.RoomOpen)
+	e.createRoom(t, 1, domain.RoomInvite)
+
+	rooms := decode[[]domain.Room](t, e.do(t, "GET", "/api/v1/rooms/open", nil, reqOpts{userID: 2}))
+	if len(rooms) != 1 || rooms[0].ID != open.ID || rooms[0].InviteCode != "" {
+		t.Errorf("open rooms: %+v", rooms)
+	}
+}
+
 func TestGetRoomVisibility(t *testing.T) {
 	e := newEnv()
 	open := e.createRoom(t, 1, domain.RoomOpen)
