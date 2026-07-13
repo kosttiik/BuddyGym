@@ -9,7 +9,9 @@ services:
       context: ./frontend
       args:
         VITE_BOT_USERNAME: ${VITE_BOT_USERNAME:-buddygym_bot}
-        VITE_MINIAPP_NAME: ${VITE_MINIAPP_NAME:-app}
+        # empty unless the bot serves a named Mini App: a Main App invite is
+        # t.me/<bot>?startapp=CODE, while t.me/<bot>/<name> needs a Direct Link
+        VITE_MINIAPP_NAME: ${VITE_MINIAPP_NAME-}
     restart: unless-stopped
     volumes:
       - ./deploy/nginx/buddygym.conf:/etc/nginx/conf.d/default.conf:ro
