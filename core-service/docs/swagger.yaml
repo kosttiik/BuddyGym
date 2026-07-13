@@ -926,7 +926,8 @@ paths:
       - rooms
   /rooms/open:
     get:
-      description: Rooms anyone can join. Invite codes are not returned.
+      description: Rooms anyone can join, excluding the ones the user is already in.
+        Invite codes are not returned.
       produces:
       - application/json
       responses:

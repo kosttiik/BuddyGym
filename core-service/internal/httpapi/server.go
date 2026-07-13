@@ -27,7 +27,7 @@ type RoomsRepo interface {
 	Update(ctx context.Context, room domain.Room) (domain.Room, error)
 	Delete(ctx context.Context, id int64) error
 	ListByUser(ctx context.Context, userID int64) ([]domain.RoomWithProgress, error)
-	ListOpen(ctx context.Context) ([]domain.Room, error)
+	ListOpen(ctx context.Context, userID int64) ([]domain.Room, error)
 	Members(ctx context.Context, roomID int64) ([]domain.Member, error)
 	IsMember(ctx context.Context, roomID, userID int64) (bool, error)
 	Join(ctx context.Context, roomID, userID int64) error

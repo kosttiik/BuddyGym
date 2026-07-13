@@ -338,6 +338,12 @@ func TestListOpenRooms(t *testing.T) {
 	if len(rooms) != 1 || rooms[0].ID != open.ID || rooms[0].InviteCode != "" {
 		t.Errorf("open rooms: %+v", rooms)
 	}
+
+	// the creator is already a member: nothing left to join
+	mine := decode[[]domain.Room](t, e.do(t, "GET", "/api/v1/rooms/open", nil, reqOpts{userID: 1}))
+	if len(mine) != 0 {
+		t.Errorf("open rooms for a member: %+v", mine)
+	}
 }
 
 func TestGetRoomVisibility(t *testing.T) {

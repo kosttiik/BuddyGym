@@ -121,10 +121,10 @@ func (f *fakeRooms) ListByUser(_ context.Context, userID int64) ([]domain.RoomWi
 	return out, nil
 }
 
-func (f *fakeRooms) ListOpen(_ context.Context) ([]domain.Room, error) {
+func (f *fakeRooms) ListOpen(_ context.Context, userID int64) ([]domain.Room, error) {
 	var out []domain.Room
 	for _, room := range f.rooms {
-		if room.Kind == domain.RoomOpen {
+		if _, joined := f.members[room.ID][userID]; room.Kind == domain.RoomOpen && !joined {
 			room.InviteCode = ""
 			out = append(out, room)
 		}

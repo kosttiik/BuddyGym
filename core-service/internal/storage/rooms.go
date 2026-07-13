@@ -136,12 +136,16 @@ func (r *Rooms) ListByUser(ctx context.Context, userID int64) ([]domain.RoomWith
 	return out, rows.Err()
 }
 
-func (r *Rooms) ListOpen(ctx context.Context) ([]domain.Room, error) {
+// ListOpen skips rooms the user already belongs to: they have nothing to join there.
+func (r *Rooms) ListOpen(ctx context.Context, userID int64) ([]domain.Room, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT `+roomColumns+`
-		FROM rooms
-		WHERE kind = $1 AND deleted_at IS NULL
-		ORDER BY created_at DESC`, domain.RoomOpen)
+		FROM rooms r
+		WHERE r.kind = $1 AND r.deleted_at IS NULL
+		  AND NOT EXISTS (
+			SELECT 1 FROM memberships m WHERE m.room_id = r.id AND m.user_id = $2
+		  )
+		ORDER BY r.created_at DESC`, domain.RoomOpen, userID)
 	if err != nil {
 		return nil, err
 	}

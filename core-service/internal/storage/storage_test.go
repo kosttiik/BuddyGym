@@ -175,6 +175,35 @@ func TestRoomsCreateGetList(t *testing.T) {
 	}
 }
 
+func TestRoomsListOpenSkipsJoined(t *testing.T) {
+	ctx := context.Background()
+	rooms := storage.NewRooms(pool(t))
+	mustUser(t, 160)
+	mustUser(t, 161)
+	room := mustRoom(t, 160)
+
+	has := func(userID int64) bool {
+		list, err := rooms.ListOpen(ctx, userID)
+		if err != nil {
+			t.Fatalf("ListOpen: %v", err)
+		}
+		return slices.ContainsFunc(list, func(r domain.Room) bool { return r.ID == room.ID })
+	}
+
+	if has(160) {
+		t.Error("creator sees own room in open rooms")
+	}
+	if !has(161) {
+		t.Error("outsider does not see the open room")
+	}
+	if err := rooms.Join(ctx, room.ID, 161); err != nil {
+		t.Fatalf("Join: %v", err)
+	}
+	if has(161) {
+		t.Error("joined room is still listed as open")
+	}
+}
+
 func TestRoomsJoinLeaveMembers(t *testing.T) {
 	ctx := context.Background()
 	rooms := storage.NewRooms(pool(t))
