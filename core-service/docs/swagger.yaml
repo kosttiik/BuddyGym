@@ -239,6 +239,33 @@ definitions:
         example: dark
         type: string
     type: object
+  httpapi.UpdateRoomRequest:
+    properties:
+      goal_per_period:
+        example: 3
+        maximum: 100
+        minimum: 1
+        type: integer
+      kind:
+        enum:
+        - open
+        - invite
+        example: open
+        type: string
+      name:
+        example: Iron buddies
+        type: string
+      period_days:
+        example: 7
+        maximum: 90
+        minimum: 1
+        type: integer
+      votes_required:
+        example: 2
+        maximum: 20
+        minimum: 1
+        type: integer
+    type: object
   httpapi.UserProfileResponse:
     properties:
       achievements:
@@ -597,6 +624,42 @@ paths:
       tags:
       - rooms
   /rooms/{id}:
+    delete:
+      description: Deletes a room and its memberships. Only the creator may do this.
+      parameters:
+      - description: room id
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a room
+      tags:
+      - rooms
     get:
       description: Room with members. Invite-only rooms are visible to members only;
         the invite code is hidden from non-members.
@@ -636,6 +699,54 @@ paths:
       security:
       - BearerAuth: []
       summary: Get room details
+      tags:
+      - rooms
+    patch:
+      consumes:
+      - application/json
+      description: Updates room settings. Only the creator may do this.
+      parameters:
+      - description: room id
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: room settings
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/httpapi.UpdateRoomRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.Room'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update a room
       tags:
       - rooms
   /rooms/{id}/checkins:

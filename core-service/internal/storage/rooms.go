@@ -86,6 +86,26 @@ func (r *Rooms) GetByInvite(ctx context.Context, code string) (domain.Room, erro
 		"SELECT "+roomColumns+" FROM rooms WHERE invite_code = $1", code))
 }
 
+func (r *Rooms) Update(ctx context.Context, room domain.Room) (domain.Room, error) {
+	return scanRoom(r.pool.QueryRow(ctx, `
+		UPDATE rooms
+		SET name = $2, kind = $3, goal_per_period = $4, period_days = $5, votes_required = $6
+		WHERE id = $1
+		RETURNING `+roomColumns,
+		room.ID, room.Name, room.Kind, room.GoalPerPeriod, room.PeriodDays, room.VotesRequired))
+}
+
+func (r *Rooms) Delete(ctx context.Context, id int64) error {
+	tag, err := r.pool.Exec(ctx, "DELETE FROM rooms WHERE id = $1", id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (r *Rooms) ListByUser(ctx context.Context, userID int64) ([]domain.RoomWithProgress, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT `+roomColumns+`, `+periodAwareCount+`,

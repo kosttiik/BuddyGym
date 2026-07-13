@@ -94,6 +94,23 @@ func (f *fakeRooms) GetByInvite(_ context.Context, code string) (domain.Room, er
 	return domain.Room{}, storage.ErrNotFound
 }
 
+func (f *fakeRooms) Update(_ context.Context, room domain.Room) (domain.Room, error) {
+	if _, ok := f.rooms[room.ID]; !ok {
+		return domain.Room{}, storage.ErrNotFound
+	}
+	f.rooms[room.ID] = room
+	return room, nil
+}
+
+func (f *fakeRooms) Delete(_ context.Context, id int64) error {
+	if _, ok := f.rooms[id]; !ok {
+		return storage.ErrNotFound
+	}
+	delete(f.rooms, id)
+	delete(f.members, id)
+	return nil
+}
+
 func (f *fakeRooms) ListByUser(_ context.Context, userID int64) ([]domain.RoomWithProgress, error) {
 	var out []domain.RoomWithProgress
 	for id, members := range f.members {

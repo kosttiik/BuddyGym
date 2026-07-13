@@ -359,6 +359,38 @@ func TestGetRoomVisibility(t *testing.T) {
 	}
 }
 
+func TestUpdateAndDeleteRoom(t *testing.T) {
+	e := newEnv()
+	room := e.createRoom(t, 1, domain.RoomOpen)
+	path := fmt.Sprintf("/api/v1/rooms/%d", room.ID)
+
+	rec := e.do(t, "PATCH", path, httpapi.UpdateRoomRequest{
+		Name: "updated", Kind: domain.RoomInvite, GoalPerPeriod: 5, PeriodDays: 14, VotesRequired: 3,
+	}, reqOpts{userID: 1})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("update: %d %s", rec.Code, rec.Body.String())
+	}
+	updated := decode[domain.Room](t, rec)
+	if updated.Name != "updated" || updated.Kind != domain.RoomInvite || updated.GoalPerPeriod != 5 || updated.PeriodDays != 14 || updated.VotesRequired != 3 {
+		t.Errorf("updated room: %+v", updated)
+	}
+
+	if rec := e.do(t, "PATCH", path, httpapi.UpdateRoomRequest{
+		Name: "nope", Kind: domain.RoomOpen, GoalPerPeriod: 3, PeriodDays: 7, VotesRequired: 2,
+	}, reqOpts{userID: 2}); rec.Code != http.StatusForbidden {
+		t.Errorf("non-creator update: %d", rec.Code)
+	}
+	if rec := e.do(t, "DELETE", path, nil, reqOpts{userID: 2}); rec.Code != http.StatusForbidden {
+		t.Errorf("non-creator delete: %d", rec.Code)
+	}
+	if rec := e.do(t, "DELETE", path, nil, reqOpts{userID: 1}); rec.Code != http.StatusNoContent {
+		t.Errorf("delete: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := e.do(t, "GET", path, nil, reqOpts{userID: 1}); rec.Code != http.StatusNotFound {
+		t.Errorf("deleted room: %d", rec.Code)
+	}
+}
+
 func TestJoinAndLeave(t *testing.T) {
 	e := newEnv()
 	open := e.createRoom(t, 1, domain.RoomOpen)

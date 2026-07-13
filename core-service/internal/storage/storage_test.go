@@ -219,6 +219,26 @@ func TestRoomsJoinLeaveMembers(t *testing.T) {
 	}
 }
 
+func TestRoomsUpdateDelete(t *testing.T) {
+	ctx := context.Background()
+	rooms := storage.NewRooms(pool(t))
+	mustUser(t, 109)
+	room := mustRoom(t, 109)
+	room.Name, room.Kind = "updated room", domain.RoomInvite
+	room.GoalPerPeriod, room.PeriodDays, room.VotesRequired = 5, 14, 3
+
+	updated, err := rooms.Update(ctx, room)
+	if err != nil || updated.Name != room.Name || updated.Kind != room.Kind || updated.VotesRequired != room.VotesRequired {
+		t.Fatalf("Update: %v, room=%+v", err, updated)
+	}
+	if err := rooms.Delete(ctx, room.ID); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if _, err := rooms.Get(ctx, room.ID); !errors.Is(err, storage.ErrNotFound) {
+		t.Errorf("Get deleted: %v, want ErrNotFound", err)
+	}
+}
+
 func TestResultsApplyIdempotent(t *testing.T) {
 	ctx := context.Background()
 	results := storage.NewResults(pool(t))

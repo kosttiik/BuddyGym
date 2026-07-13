@@ -16,6 +16,8 @@ type CreateRoomRequest struct {
 	VotesRequired int    `json:"votes_required" example:"2" minimum:"1" maximum:"20"`
 }
 
+type UpdateRoomRequest = CreateRoomRequest
+
 type JoinByCodeRequest struct {
 	InviteCode string `json:"invite_code" example:"7HKPQ2XW"`
 }
@@ -107,6 +109,92 @@ func (s *Server) handleCreateRoom(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, room)
+}
+
+// handleUpdateRoom godoc
+//
+//	@Summary		Update a room
+//	@Description	Updates room settings. Only the creator may do this.
+//	@Tags			rooms
+//	@Security		BearerAuth
+//	@Accept			json
+//	@Produce		json
+//	@Param			id		path	int				true	"room id"
+//	@Param			body	body	UpdateRoomRequest	true	"room settings"
+//	@Success		200	{object}	domain.Room
+//	@Failure		400	{object}	ErrorResponse
+//	@Failure		401	{object}	ErrorResponse
+//	@Failure		403	{object}	ErrorResponse
+//	@Failure		404	{object}	ErrorResponse
+//	@Failure		500	{object}	ErrorResponse
+//	@Router			/rooms/{id} [patch]
+func (s *Server) handleUpdateRoom(w http.ResponseWriter, r *http.Request) {
+	id, ok := roomID(r)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "invalid room id")
+		return
+	}
+	room, err := s.rooms.Get(r.Context(), id)
+	if err != nil {
+		s.mapError(w, err)
+		return
+	}
+	if room.CreatorID != userFrom(r.Context()).ID {
+		writeErr(w, http.StatusForbidden, "room creator only")
+		return
+	}
+	var req UpdateRoomRequest
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	if msg := req.validate(); msg != "" {
+		writeErr(w, http.StatusBadRequest, msg)
+		return
+	}
+	room.Name, room.Kind = req.Name, req.Kind
+	room.GoalPerPeriod, room.PeriodDays, room.VotesRequired = req.GoalPerPeriod, req.PeriodDays, req.VotesRequired
+	updated, err := s.rooms.Update(r.Context(), room)
+	if err != nil {
+		s.mapError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, updated)
+}
+
+// handleDeleteRoom godoc
+//
+//	@Summary		Delete a room
+//	@Description	Deletes a room and its memberships. Only the creator may do this.
+//	@Tags			rooms
+//	@Security		BearerAuth
+//	@Param			id	path	int	true	"room id"
+//	@Success		204
+//	@Failure		400	{object}	ErrorResponse
+//	@Failure		401	{object}	ErrorResponse
+//	@Failure		403	{object}	ErrorResponse
+//	@Failure		404	{object}	ErrorResponse
+//	@Failure		500	{object}	ErrorResponse
+//	@Router			/rooms/{id} [delete]
+func (s *Server) handleDeleteRoom(w http.ResponseWriter, r *http.Request) {
+	id, ok := roomID(r)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "invalid room id")
+		return
+	}
+	room, err := s.rooms.Get(r.Context(), id)
+	if err != nil {
+		s.mapError(w, err)
+		return
+	}
+	if room.CreatorID != userFrom(r.Context()).ID {
+		writeErr(w, http.StatusForbidden, "room creator only")
+		return
+	}
+	if err := s.rooms.Delete(r.Context(), room.ID); err != nil {
+		s.mapError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // handleListRooms godoc
