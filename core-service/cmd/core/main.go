@@ -71,7 +71,12 @@ func run(log *slog.Logger) error {
 	defer rdb.Close()
 
 	conn, err := grpc.NewClient(cfg.CheckinAddr,
-		grpc.WithTransportCredentials(insecure.NewCredentials()))
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(12*1024*1024),
+			grpc.MaxCallSendMsgSize(12*1024*1024),
+		),
+	)
 	if err != nil {
 		return err
 	}
