@@ -15,6 +15,8 @@ service CheckinService {
   rpc CastVote(CastVoteRequest) returns (CastVoteResponse);
   // photos are never public: core streams them to authorized room members
   rpc GetCheckinPhoto(GetCheckinPhotoRequest) returns (stream CheckinPhotoChunk);
+  // core calls this when a room is gone for good
+  rpc PurgeRoom(PurgeRoomRequest) returns (PurgeRoomResponse);
 }
 
 enum CheckinStatus {
@@ -110,4 +112,14 @@ message CastVoteRequest {
 
 message CastVoteResponse {
   Checkin checkin = 1;
+}
+
+message PurgeRoomRequest {
+  int64 room_id = 1;
+}
+
+message PurgeRoomResponse {
+  int32 checkins_deleted = 1;
+  // a shared photo is kept while any checkin in another room still points at it
+  int32 photos_deleted = 2;
 }

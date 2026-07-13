@@ -49,7 +49,12 @@ func (r *Results) Apply(ctx context.Context, checkinID string, roomID, userID in
 		_, err = tx.Exec(ctx, `
 			UPDATE memberships m SET
 				workouts_count = CASE WHEN now() >= m.period_start + r.period_days * interval '1 day'
-				                      THEN 1 ELSE m.workouts_count + 1 END,
+				                      THEN 1 ELSE (
+						SELECT count(DISTINCT (cr.applied_at AT TIME ZONE 'UTC')::date)::int
+						FROM checkin_results cr
+						WHERE cr.room_id = m.room_id AND cr.user_id = m.user_id
+						  AND cr.status = 'approved' AND cr.applied_at >= m.period_start
+					) END,
 				period_start = CASE WHEN now() >= m.period_start + r.period_days * interval '1 day'
 				                    THEN now() ELSE m.period_start END
 			FROM rooms r

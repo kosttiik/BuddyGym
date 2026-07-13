@@ -27,6 +27,7 @@ import (
 	"github.com/kosttiik/BuddyGym/core-service/internal/grpcserver"
 	"github.com/kosttiik/BuddyGym/core-service/internal/httpapi"
 	"github.com/kosttiik/BuddyGym/core-service/internal/ratelimit"
+	roomreaper "github.com/kosttiik/BuddyGym/core-service/internal/rooms"
 	"github.com/kosttiik/BuddyGym/core-service/internal/storage"
 )
 
@@ -84,12 +85,13 @@ func run(log *slog.Logger) error {
 
 	users := storage.NewUsers(pool)
 	rooms := storage.NewRooms(pool)
+	checkinClient := checkin.NewClient(conn)
 	results := storage.NewResults(pool)
 
 	api := httpapi.New(httpapi.Options{
 		Users:          users,
 		Rooms:          rooms,
-		Checkins:       checkin.NewClient(conn),
+		Checkins:       checkinClient,
 		BotToken:       cfg.BotToken,
 		AuthTTL:        cfg.AuthTTL,
 		JWTSecret:      cfg.JWTSecret,
@@ -117,6 +119,13 @@ func run(log *slog.Logger) error {
 	grpcSrv := grpc.NewServer()
 	pbv1.RegisterCoreInternalServiceServer(grpcSrv, grpcserver.New(users, rooms, results, log))
 	reflection.Register(grpcSrv)
+
+	reaper := roomreaper.New(roomreaper.Options{
+		Rooms:    rooms,
+		Checkins: checkinClient,
+		Log:      log,
+	})
+	go reaper.Run(ctx)
 
 	errCh := make(chan error, 2)
 	go func() {
