@@ -44,6 +44,11 @@ type AvatarMirror interface {
 	SyncInBackground(userID int64, photoURL, mirroredFrom string)
 }
 
+type StreaksRepo interface {
+	StreaksByRoom(ctx context.Context, roomID int64) ([]domain.StreakInput, error)
+	StreaksByUser(ctx context.Context, userID int64) ([]domain.StreakInput, error)
+}
+
 type CheckinClient interface {
 	Create(ctx context.Context, userID int64, targets []checkin.Target, photo []byte, geo *checkin.Geo) ([]checkin.Checkin, error)
 	Get(ctx context.Context, id string) (checkin.Checkin, error)
@@ -61,6 +66,7 @@ type RateLimiter interface {
 type Server struct {
 	users        UsersRepo
 	rooms        RoomsRepo
+	streaks      StreaksRepo
 	checkins     CheckinClient
 	avatars      AvatarStore
 	avatarMirror AvatarMirror
@@ -82,6 +88,7 @@ type Server struct {
 type Options struct {
 	Users          UsersRepo
 	Rooms          RoomsRepo
+	Streaks        StreaksRepo
 	Checkins       CheckinClient
 	Avatars        AvatarStore
 	AvatarMirror   AvatarMirror
@@ -108,6 +115,7 @@ func New(opts Options) *Server {
 	return &Server{
 		users:          opts.Users,
 		rooms:          opts.Rooms,
+		streaks:        opts.Streaks,
 		checkins:       opts.Checkins,
 		avatars:        opts.Avatars,
 		avatarMirror:   opts.AvatarMirror,

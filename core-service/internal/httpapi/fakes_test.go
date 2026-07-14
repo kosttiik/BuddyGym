@@ -17,6 +17,54 @@ import (
 	"github.com/kosttiik/BuddyGym/core-service/internal/storage"
 )
 
+type streakKey struct{ roomID, userID int64 }
+
+// fakeStreaks turns a wanted streak into the days that produce it: with a goal of one
+// workout a day, a run of N consecutive days ending today is a streak of N.
+type fakeStreaks struct {
+	want map[streakKey]int
+}
+
+func newFakeStreaks() *fakeStreaks {
+	return &fakeStreaks{want: map[streakKey]int{}}
+}
+
+func (f *fakeStreaks) set(roomID, userID int64, streak int) {
+	f.want[streakKey{roomID, userID}] = streak
+}
+
+func (f *fakeStreaks) input(k streakKey, streak int) domain.StreakInput {
+	today := time.Now().UTC().Truncate(24 * time.Hour)
+	in := domain.StreakInput{
+		RoomID: k.roomID, UserID: k.userID, Goal: 1, PeriodDays: 1,
+		JoinedAt: today.AddDate(0, 0, -streak),
+	}
+	for i := range streak {
+		in.Days = append(in.Days, today.AddDate(0, 0, -i))
+	}
+	return in
+}
+
+func (f *fakeStreaks) StreaksByRoom(_ context.Context, roomID int64) ([]domain.StreakInput, error) {
+	var out []domain.StreakInput
+	for k, streak := range f.want {
+		if k.roomID == roomID {
+			out = append(out, f.input(k, streak))
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeStreaks) StreaksByUser(_ context.Context, userID int64) ([]domain.StreakInput, error) {
+	var out []domain.StreakInput
+	for k, streak := range f.want {
+		if k.userID == userID {
+			out = append(out, f.input(k, streak))
+		}
+	}
+	return out, nil
+}
+
 type fakeUsers struct {
 	users map[int64]domain.User
 	achs  map[int64][]domain.Achievement

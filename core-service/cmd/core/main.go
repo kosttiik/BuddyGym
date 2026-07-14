@@ -108,6 +108,7 @@ func run(log *slog.Logger) error {
 	api := httpapi.New(httpapi.Options{
 		Users:          users,
 		Rooms:          rooms,
+		Streaks:        results,
 		Checkins:       checkinClient,
 		Avatars:        avatarStore,
 		AvatarMirror:   avatarMirror,

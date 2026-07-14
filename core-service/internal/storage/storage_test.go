@@ -305,41 +305,45 @@ func TestResultsApplyIdempotent(t *testing.T) {
 	}
 }
 
+// The room is goal 3 per 7 days. With the member joined 10 days ago the grid is on its
+// second period, so workouts from the first one must not count toward the current goal.
 func TestResultsPeriodRollover(t *testing.T) {
 	ctx := context.Background()
 	results := storage.NewResults(pool(t))
 	mustUser(t, 107)
 	room := mustRoom(t, 107)
 
-	if _, err := results.Apply(ctx, "chk-r1", room.ID, 107, storage.ResultApproved, time.Now()); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := results.Apply(ctx, "chk-r2", room.ID, 107, storage.ResultApproved, time.Now()); err != nil {
-		t.Fatal(err)
-	}
-
 	_, err := pool(t).Exec(ctx,
-		"UPDATE memberships SET period_start = now() - interval '8 days' WHERE room_id = $1", room.ID)
+		"UPDATE memberships SET joined_at = now() - interval '10 days' WHERE room_id = $1", room.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	now := time.Now()
+	for i, id := range []string{"chk-r1", "chk-r2"} {
+		day := now.AddDate(0, 0, -10+i)
+		if _, err := results.Apply(ctx, id, room.ID, 107, storage.ResultApproved, day); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if count, _ := results.PeriodCount(ctx, room.ID, 107); count != 0 {
-		t.Errorf("stale period count = %d, want 0", count)
+		t.Errorf("count from the closed period = %d, want 0", count)
 	}
 
-	if _, err := results.Apply(ctx, "chk-r3", room.ID, 107, storage.ResultApproved, time.Now()); err != nil {
+	if _, err := results.Apply(ctx, "chk-r3", room.ID, 107, storage.ResultApproved, now); err != nil {
 		t.Fatal(err)
 	}
 	if count, _ := results.PeriodCount(ctx, room.ID, 107); count != 1 {
-		t.Errorf("count after rollover = %d, want 1", count)
+		t.Errorf("count in the current period = %d, want 1", count)
 	}
 	if total, _ := results.TotalApproved(ctx, 107); total != 3 {
 		t.Errorf("total = %d, want 3", total)
 	}
 }
 
-func TestResultsWorkoutDays(t *testing.T) {
+// The room is goal 3 per 7 days. The member joins today, so every day below sits in the
+// period in progress and the streak is simply the number of distinct workout days.
+func TestResultsStreakInputs(t *testing.T) {
 	ctx := context.Background()
 	results := storage.NewResults(pool(t))
 	mustUser(t, 108)
@@ -352,25 +356,59 @@ func TestResultsWorkoutDays(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// same day duplicate must collapse into one date
+	// a second checkin on a day already counted must not count twice
 	if _, err := results.Apply(ctx, "chk-d4", room.ID, 108, storage.ResultApproved, now); err != nil {
 		t.Fatal(err)
 	}
+	// a rejected one is not a workout
+	if _, err := results.Apply(ctx, "chk-d5", room.ID, 108, storage.ResultRejected, now); err != nil {
+		t.Fatal(err)
+	}
 
-	days, err := results.WorkoutDays(ctx, 108, 100)
+	byRoom, err := results.StreaksByRoom(ctx, room.ID)
 	if err != nil {
-		t.Fatalf("WorkoutDays: %v", err)
+		t.Fatalf("StreaksByRoom: %v", err)
 	}
-	if len(days) != 3 {
-		t.Fatalf("len(days) = %d, want 3", len(days))
+	if len(byRoom) != 1 {
+		t.Fatalf("len(byRoom) = %d, want 1", len(byRoom))
 	}
-	for i := 1; i < len(days); i++ {
-		if !days[i-1].After(days[i]) {
-			t.Errorf("days not descending: %v", days)
-		}
-		if days[i-1].Sub(days[i]) != 24*time.Hour {
-			t.Errorf("days not consecutive: %v", days)
-		}
+	in := byRoom[0]
+	if in.UserID != 108 || in.Goal != 3 || in.PeriodDays != 7 {
+		t.Errorf("input = %+v, want user 108 goal 3 period 7", in)
+	}
+	if len(in.Days) != 3 {
+		t.Fatalf("days = %v, want 3 distinct", in.Days)
+	}
+	// joined today, so the days sit in periods 0 and -1; only the current one counts
+	if got := domain.BestStreak(byRoom, now); got != 1 {
+		t.Errorf("streak = %d, want 1", got)
+	}
+
+	byUser, err := results.StreaksByUser(ctx, 108)
+	if err != nil {
+		t.Fatalf("StreaksByUser: %v", err)
+	}
+	if len(byUser) != 1 || len(byUser[0].Days) != 3 {
+		t.Errorf("byUser = %+v, want the same single membership", byUser)
+	}
+}
+
+// A member who never checked in still needs a row, otherwise they vanish from the boards.
+func TestResultsStreakInputsIncludesIdleMembers(t *testing.T) {
+	ctx := context.Background()
+	results := storage.NewResults(pool(t))
+	mustUser(t, 109)
+	room := mustRoom(t, 109)
+
+	inputs, err := results.StreaksByRoom(ctx, room.ID)
+	if err != nil {
+		t.Fatalf("StreaksByRoom: %v", err)
+	}
+	if len(inputs) != 1 || len(inputs[0].Days) != 0 {
+		t.Fatalf("inputs = %+v, want one member with no days", inputs)
+	}
+	if got := inputs[0].Streak(time.Now()); got != 0 {
+		t.Errorf("streak = %d, want 0", got)
 	}
 }
 

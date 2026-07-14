@@ -13,6 +13,8 @@ var allowedThemes = []string{"default", "dark", "neon"}
 type MeResponse struct {
 	User         domain.User          `json:"user"`
 	Achievements []domain.Achievement `json:"achievements"`
+	// highest streak across the user rooms
+	BestStreak int `json:"best_streak"`
 }
 
 type UpdateMeRequest struct {
@@ -40,7 +42,16 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 	if achs == nil {
 		achs = []domain.Achievement{}
 	}
-	writeJSON(w, http.StatusOK, MeResponse{User: user, Achievements: achs})
+	streaks, err := s.streaks.StreaksByUser(r.Context(), user.ID)
+	if err != nil {
+		s.internal(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, MeResponse{
+		User:         user,
+		Achievements: achs,
+		BestStreak:   domain.BestStreak(streaks, s.now()),
+	})
 }
 
 // handlePatchMe godoc

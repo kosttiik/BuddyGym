@@ -1231,12 +1231,18 @@ const docTemplate = `{
                 "joined_at": {
                     "type": "string"
                 },
+                "period_ends_at": {
+                    "type": "string"
+                },
                 "photo_url": {
                     "description": "the telegram URL, unreachable for our users. Kept as the mirror change signal, not for display.",
                     "type": "string"
                 },
                 "status": {
                     "type": "string"
+                },
+                "streak": {
+                    "type": "integer"
                 },
                 "theme": {
                     "type": "string"
@@ -1309,6 +1315,13 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "period_days": {
+                    "type": "integer"
+                },
+                "period_ends_at": {
+                    "description": "when the current period closes and the streak burns unless the goal is met",
+                    "type": "string"
+                },
+                "streak": {
                     "type": "integer"
                 },
                 "votes_required": {
@@ -1467,6 +1480,10 @@ const docTemplate = `{
                         "$ref": "#/definitions/domain.Achievement"
                     }
                 },
+                "best_streak": {
+                    "description": "highest streak across the user rooms",
+                    "type": "integer"
+                },
                 "user": {
                     "$ref": "#/definitions/domain.User"
                 }
@@ -1543,6 +1560,9 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/domain.Achievement"
                     }
+                },
+                "best_streak": {
+                    "type": "integer"
                 },
                 "user": {
                     "$ref": "#/definitions/domain.User"

@@ -22,14 +22,23 @@ func NewRooms(pool *pgxpool.Pool) *Rooms {
 
 const roomColumns = "id, name, kind, invite_code, goal_per_period, period_days, votes_required, creator_id, created_at"
 
-const periodAwareCount = `
-	CASE WHEN now() >= m.period_start + r.period_days * interval '1 day'
-	     THEN 0 ELSE (
-		SELECT count(DISTINCT (cr.checkin_created_at AT TIME ZONE 'UTC')::date)::int
-		FROM checkin_results cr
-		WHERE cr.room_id = m.room_id AND cr.user_id = m.user_id
-		  AND cr.status = 'approved' AND cr.checkin_created_at >= m.period_start
-	) END`
+// Periods are a fixed grid anchored on the day the member joined, the same grid
+// domain.RoomStreak walks. memberships.period_start only moves when a checkin lands, so
+// it would drift away from the streak and show a goal met against a period already burnt.
+const periodStartDate = `
+	((m.joined_at AT TIME ZONE 'UTC')::date + (floor(
+		(((now() AT TIME ZONE 'UTC')::date - (m.joined_at AT TIME ZONE 'UTC')::date))::numeric
+		/ r.period_days
+	)::int * r.period_days))`
+
+const periodAwareCount = `(
+	SELECT count(DISTINCT (cr.checkin_created_at AT TIME ZONE 'UTC')::date)::int
+	FROM checkin_results cr
+	WHERE cr.room_id = m.room_id AND cr.user_id = m.user_id AND cr.status = 'approved'
+	  AND (cr.checkin_created_at AT TIME ZONE 'UTC')::date >= ` + periodStartDate + `
+)`
+
+const periodEndsAt = `((` + periodStartDate + ` + r.period_days)::timestamptz)`
 
 func scanRoom(row pgx.Row) (domain.Room, error) {
 	var rm domain.Room
@@ -113,7 +122,8 @@ func (r *Rooms) Delete(ctx context.Context, id int64) error {
 func (r *Rooms) ListByUser(ctx context.Context, userID int64) ([]domain.RoomWithProgress, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT `+roomColumns+`, `+periodAwareCount+`,
-		       (SELECT count(*) FROM memberships m2 WHERE m2.room_id = r.id)
+		       (SELECT count(*) FROM memberships m2 WHERE m2.room_id = r.id),
+		       `+periodEndsAt+`
 		FROM memberships m
 		JOIN rooms r ON r.id = m.room_id
 		WHERE m.user_id = $1 AND r.deleted_at IS NULL
@@ -128,7 +138,7 @@ func (r *Rooms) ListByUser(ctx context.Context, userID int64) ([]domain.RoomWith
 		var rp domain.RoomWithProgress
 		if err := rows.Scan(&rp.ID, &rp.Name, &rp.Kind, &rp.InviteCode, &rp.GoalPerPeriod,
 			&rp.PeriodDays, &rp.VotesRequired, &rp.CreatorID, &rp.CreatedAt,
-			&rp.WorkoutsCount, &rp.MembersCount); err != nil {
+			&rp.WorkoutsCount, &rp.MembersCount, &rp.PeriodEndsAt); err != nil {
 			return nil, err
 		}
 		out = append(out, rp)
@@ -167,7 +177,7 @@ func (r *Rooms) ListOpen(ctx context.Context, userID int64) ([]domain.Room, erro
 func (r *Rooms) Members(ctx context.Context, roomID int64) ([]domain.Member, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT u.id, u.username, u.first_name, u.photo_url, u.theme, u.status, u.created_at,
-		       u.avatar_key, `+periodAwareCount+`, m.joined_at
+		       u.avatar_key, `+periodAwareCount+`, m.joined_at, `+periodEndsAt+`
 		FROM memberships m
 		JOIN users u ON u.id = m.user_id
 		JOIN rooms r ON r.id = m.room_id
@@ -182,7 +192,8 @@ func (r *Rooms) Members(ctx context.Context, roomID int64) ([]domain.Member, err
 	for rows.Next() {
 		var mb domain.Member
 		if err := rows.Scan(&mb.ID, &mb.Username, &mb.FirstName, &mb.PhotoURL, &mb.Theme,
-			&mb.Status, &mb.CreatedAt, &mb.AvatarKey, &mb.WorkoutsCount, &mb.JoinedAt); err != nil {
+			&mb.Status, &mb.CreatedAt, &mb.AvatarKey, &mb.WorkoutsCount, &mb.JoinedAt,
+			&mb.PeriodEndsAt); err != nil {
 			return nil, err
 		}
 		mb.HasAvatar = mb.AvatarKey != ""

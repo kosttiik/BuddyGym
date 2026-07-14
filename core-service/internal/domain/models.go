@@ -44,10 +44,15 @@ type RoomWithProgress struct {
 	Room
 	WorkoutsCount int `json:"workouts_count"`
 	MembersCount  int `json:"members_count"`
+	Streak        int `json:"streak"`
+	// when the current period closes and the streak burns unless the goal is met
+	PeriodEndsAt time.Time `json:"period_ends_at"`
 }
 
 type Member struct {
 	User
 	WorkoutsCount int       `json:"workouts_count"`
 	JoinedAt      time.Time `json:"joined_at"`
+	Streak        int       `json:"streak"`
+	PeriodEndsAt  time.Time `json:"period_ends_at"`
 }

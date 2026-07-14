@@ -209,13 +209,27 @@ func (s *Server) handleDeleteRoom(w http.ResponseWriter, r *http.Request) {
 //	@Failure		500	{object}	ErrorResponse
 //	@Router			/rooms [get]
 func (s *Server) handleListRooms(w http.ResponseWriter, r *http.Request) {
-	rooms, err := s.rooms.ListByUser(r.Context(), userFrom(r.Context()).ID)
+	userID := userFrom(r.Context()).ID
+	rooms, err := s.rooms.ListByUser(r.Context(), userID)
 	if err != nil {
 		s.internal(w, err)
 		return
 	}
 	if rooms == nil {
 		rooms = []domain.RoomWithProgress{}
+	}
+
+	streaks, err := s.streaks.StreaksByUser(r.Context(), userID)
+	if err != nil {
+		s.internal(w, err)
+		return
+	}
+	byRoom := make(map[int64]int, len(streaks))
+	for _, in := range streaks {
+		byRoom[in.RoomID] = in.Streak(s.now())
+	}
+	for i := range rooms {
+		rooms[i].Streak = byRoom[rooms[i].ID]
 	}
 	writeJSON(w, http.StatusOK, rooms)
 }
@@ -285,6 +299,18 @@ func (s *Server) handleGetRoom(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.internal(w, err)
 		return
+	}
+	streaks, err := s.streaks.StreaksByRoom(r.Context(), room.ID)
+	if err != nil {
+		s.internal(w, err)
+		return
+	}
+	byUser := make(map[int64]int, len(streaks))
+	for _, in := range streaks {
+		byUser[in.UserID] = in.Streak(s.now())
+	}
+	for i := range members {
+		members[i].Streak = byUser[members[i].ID]
 	}
 	writeJSON(w, http.StatusOK, RoomDetailResponse{Room: room, Members: members})
 }
