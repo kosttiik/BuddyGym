@@ -28,18 +28,18 @@ func TestEarnedAchievements(t *testing.T) {
 	}
 }
 
-func TestStatusFor(t *testing.T) {
+func TestRankFor(t *testing.T) {
 	tests := []struct {
 		total int
 		want  string
 	}{
-		{0, StatusNovice}, {9, StatusNovice},
-		{10, StatusRegular}, {49, StatusRegular},
-		{50, StatusBeast}, {500, StatusBeast},
+		{0, RankNovice}, {9, RankNovice},
+		{10, RankRegular}, {49, RankRegular},
+		{50, RankBeast}, {500, RankBeast},
 	}
 	for _, tt := range tests {
-		if got := StatusFor(tt.total); got != tt.want {
-			t.Errorf("StatusFor(%d) = %q, want %q", tt.total, got, tt.want)
+		if got := RankFor(tt.total); got != tt.want {
+			t.Errorf("RankFor(%d) = %q, want %q", tt.total, got, tt.want)
 		}
 	}
 }

@@ -176,8 +176,8 @@ func (r *Rooms) ListOpen(ctx context.Context, userID int64) ([]domain.Room, erro
 
 func (r *Rooms) Members(ctx context.Context, roomID int64) ([]domain.Member, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT u.id, u.username, u.first_name, u.photo_url, u.theme, u.status, u.created_at,
-		       u.avatar_key, `+periodAwareCount+`, m.joined_at, `+periodEndsAt+`
+		SELECT u.id, u.username, u.first_name, u.photo_url, u.theme, u.rank,
+		       u.status_emoji, u.status_text, u.created_at, u.avatar_key, `+periodAwareCount+`, m.joined_at, `+periodEndsAt+`
 		FROM memberships m
 		JOIN users u ON u.id = m.user_id
 		JOIN rooms r ON r.id = m.room_id
@@ -192,8 +192,8 @@ func (r *Rooms) Members(ctx context.Context, roomID int64) ([]domain.Member, err
 	for rows.Next() {
 		var mb domain.Member
 		if err := rows.Scan(&mb.ID, &mb.Username, &mb.FirstName, &mb.PhotoURL, &mb.Theme,
-			&mb.Status, &mb.CreatedAt, &mb.AvatarKey, &mb.WorkoutsCount, &mb.JoinedAt,
-			&mb.PeriodEndsAt); err != nil {
+			&mb.Rank, &mb.StatusEmoji, &mb.StatusText, &mb.CreatedAt, &mb.AvatarKey,
+			&mb.WorkoutsCount, &mb.JoinedAt, &mb.PeriodEndsAt); err != nil {
 			return nil, err
 		}
 		mb.HasAvatar = mb.AvatarKey != ""

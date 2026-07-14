@@ -138,7 +138,7 @@ func TestUsersUpsertGet(t *testing.T) {
 	users := storage.NewUsers(pool(t))
 
 	u := mustUser(t, 101)
-	if u.Theme != "default" || u.Status != domain.StatusNovice {
+	if u.Theme != "default" || u.Rank != domain.RankNovice {
 		t.Errorf("unexpected defaults: %+v", u)
 	}
 
@@ -167,8 +167,8 @@ func TestUsersThemeStatusAchievements(t *testing.T) {
 	if err != nil || u.Theme != "dark" {
 		t.Fatalf("UpdateTheme: %v, theme=%q", err, u.Theme)
 	}
-	if err := users.SetStatus(ctx, 102, domain.StatusRegular); err != nil {
-		t.Fatalf("SetStatus: %v", err)
+	if err := users.SetRank(ctx, 102, domain.RankRegular); err != nil {
+		t.Fatalf("SetRank: %v", err)
 	}
 
 	granted, err := users.Grant(ctx, 102, []string{domain.AchFirstCheckin, domain.AchWorkouts10})

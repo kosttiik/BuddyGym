@@ -17,8 +17,11 @@ type MeResponse struct {
 	BestStreak int `json:"best_streak"`
 }
 
+// Every field is optional: a nil one is left alone, an empty string clears it.
 type UpdateMeRequest struct {
-	Theme string `json:"theme" example:"dark" enums:"default,dark,neon"`
+	Theme       *string `json:"theme,omitempty" example:"dark" enums:"default,dark,neon"`
+	StatusEmoji *string `json:"status_emoji,omitempty"`
+	StatusText  *string `json:"status_text,omitempty" example:"На массе"`
 }
 
 // handleGetMe godoc
@@ -57,7 +60,7 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 // handlePatchMe godoc
 //
 //	@Summary		Update my profile
-//	@Description	Changes the profile theme. Status is derived from workouts and cannot be set.
+//	@Description	Changes the theme and the status line. Every field is optional; only the ones present are written. Empty strings clear the status. The rank is derived from workouts and cannot be set.
 //	@Tags			me
 //	@Security		BearerAuth
 //	@Accept			json
@@ -73,14 +76,48 @@ func (s *Server) handlePatchMe(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &req) {
 		return
 	}
-	if !slices.Contains(allowedThemes, req.Theme) {
-		writeErr(w, http.StatusBadRequest, "unknown theme")
-		return
+	userID := userFrom(r.Context()).ID
+	user := userFrom(r.Context())
+
+	if req.Theme != nil {
+		if !slices.Contains(allowedThemes, *req.Theme) {
+			writeErr(w, http.StatusBadRequest, "unknown theme")
+			return
+		}
+		updated, err := s.users.UpdateTheme(r.Context(), userID, *req.Theme)
+		if err != nil {
+			s.mapError(w, err)
+			return
+		}
+		user = updated
 	}
-	user, err := s.users.UpdateTheme(r.Context(), userFrom(r.Context()).ID, req.Theme)
-	if err != nil {
-		s.mapError(w, err)
-		return
+
+	// the status is a pair: sending one half alone would leave a stray emoji or a naked line
+	if req.StatusEmoji != nil || req.StatusText != nil {
+		emoji, text := user.StatusEmoji, user.StatusText
+		if req.StatusEmoji != nil {
+			emoji = *req.StatusEmoji
+		}
+		if req.StatusText != nil {
+			text = *req.StatusText
+		}
+		emoji, err := domain.NormalizeStatusEmoji(emoji)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		text, err = domain.NormalizeStatusText(text)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		updated, err := s.users.SetStatus(r.Context(), userID, emoji, text)
+		if err != nil {
+			s.mapError(w, err)
+			return
+		}
+		user = updated
 	}
+
 	writeJSON(w, http.StatusOK, user)
 }

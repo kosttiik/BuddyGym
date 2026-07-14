@@ -13,10 +13,14 @@ type User struct {
 	Username  string `json:"username"`
 	FirstName string `json:"first_name"`
 	// the telegram URL, unreachable for our users. Kept as the mirror change signal, not for display.
-	PhotoURL  string    `json:"photo_url"`
-	Theme     string    `json:"theme"`
-	Status    string    `json:"status"`
-	CreatedAt time.Time `json:"created_at"`
+	PhotoURL string `json:"photo_url"`
+	Theme    string `json:"theme"`
+	// derived from the workout total, not settable
+	Rank string `json:"rank"`
+	// what the member writes about themselves: a single emoji plus a short line
+	StatusEmoji string    `json:"status_emoji"`
+	StatusText  string    `json:"status_text"`
+	CreatedAt   time.Time `json:"created_at"`
 	// clients read the bytes from GET /users/{id}/avatar, never from object storage directly
 	HasAvatar    bool   `json:"has_avatar"`
 	AvatarKey    string `json:"-"`
