@@ -103,10 +103,19 @@ func (f *fakeResults) PeriodCount(_ context.Context, roomID, userID int64) (int,
 	return f.counts[resultKey{roomID, userID}], nil
 }
 
+type fakeBuddies struct {
+	tagged map[string][]int64
+}
+
+func (f *fakeBuddies) UserIDs(_ context.Context, checkinID string) ([]int64, error) {
+	return f.tagged[checkinID], nil
+}
+
 type env struct {
 	users   *fakeUsers
 	rooms   *fakeRooms
 	results *fakeResults
+	buddies *fakeBuddies
 	client  pbv1.CoreInternalServiceClient
 }
 
@@ -116,10 +125,11 @@ func newEnv(t *testing.T) *env {
 		users:   &fakeUsers{granted: map[int64][]string{}, rank: map[int64]string{}},
 		rooms:   &fakeRooms{rooms: map[int64]domain.Room{}, members: map[int64][]int64{}},
 		results: &fakeResults{seen: map[string]bool{}, counts: map[resultKey]int{}, days: map[int64][]time.Time{}},
+		buddies: &fakeBuddies{tagged: map[string][]int64{}},
 	}
 	lis := bufconn.Listen(1 << 20)
 	srv := grpc.NewServer()
-	pbv1.RegisterCoreInternalServiceServer(srv, grpcserver.New(e.users, e.rooms, e.results, nil))
+	pbv1.RegisterCoreInternalServiceServer(srv, grpcserver.New(e.users, e.rooms, e.results, e.buddies, nil))
 	go srv.Serve(lis)
 	t.Cleanup(srv.Stop)
 
@@ -215,6 +225,58 @@ func TestApplyCheckinResultUsesWorkoutTime(t *testing.T) {
 	}
 	if len(e.results.applied) != 2 || e.results.applied[1].IsZero() {
 		t.Fatalf("fallback recorded %v, want a real time", e.results.applied)
+	}
+}
+
+func TestApprovedCheckinCreditsTaggedBuddies(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	e.buddies.tagged["c1"] = []int64{8, 9}
+
+	_, err := e.client.ApplyCheckinResult(ctx, &pbv1.ApplyCheckinResultRequest{
+		CheckinId: "c1", RoomId: 1, UserId: 7,
+		Status: pbv1.CheckinStatus_CHECKIN_STATUS_APPROVED,
+	})
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	for _, id := range []int64{7, 8, 9} {
+		if got := e.results.counts[resultKey{1, id}]; got != 1 {
+			t.Errorf("user %d has %d workouts, want 1", id, got)
+		}
+		if !slices.Contains(e.users.granted[id], domain.AchFirstCheckin) {
+			t.Errorf("user %d was not rewarded: %v", id, e.users.granted[id])
+		}
+	}
+
+	// checkin-service retries delivery, and a retry must not hand out a second workout
+	if _, err := e.client.ApplyCheckinResult(ctx, &pbv1.ApplyCheckinResultRequest{
+		CheckinId: "c1", RoomId: 1, UserId: 7,
+		Status: pbv1.CheckinStatus_CHECKIN_STATUS_APPROVED,
+	}); err != nil {
+		t.Fatalf("redeliver: %v", err)
+	}
+	for _, id := range []int64{7, 8, 9} {
+		if got := e.results.counts[resultKey{1, id}]; got != 1 {
+			t.Errorf("redelivery gave user %d %d workouts, want 1", id, got)
+		}
+	}
+}
+
+// A rejected photo proves nothing, so the people on it earn nothing either.
+func TestRejectedCheckinCreditsNobody(t *testing.T) {
+	e := newEnv(t)
+	e.buddies.tagged["c1"] = []int64{8}
+
+	_, err := e.client.ApplyCheckinResult(context.Background(), &pbv1.ApplyCheckinResultRequest{
+		CheckinId: "c1", RoomId: 1, UserId: 7,
+		Status: pbv1.CheckinStatus_CHECKIN_STATUS_REJECTED,
+	})
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if got := e.results.counts[resultKey{1, 8}]; got != 0 {
+		t.Errorf("buddy got %d workouts from a rejected checkin, want 0", got)
 	}
 }
 

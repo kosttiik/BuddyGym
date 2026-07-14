@@ -64,6 +64,7 @@ type env struct {
 	users    *fakeUsers
 	rooms    *fakeRooms
 	streaks  *fakeStreaks
+	buddies  *fakeBuddies
 	checkins *fakeCheckins
 	avatars  *fakeAvatars
 	handler  http.Handler
@@ -79,10 +80,12 @@ func newEnv(opts ...func(*httpapi.Options)) *env {
 		checkins: newFakeCheckins(),
 		avatars:  newFakeAvatars(),
 	}
+	e.buddies = newFakeBuddies(e.users)
 	o := httpapi.Options{
 		Users:     e.users,
 		Rooms:     e.rooms,
 		Streaks:   e.streaks,
+		Buddies:   e.buddies,
 		Checkins:  e.checkins,
 		Avatars:   e.avatars,
 		BotToken:  testToken,
@@ -601,6 +604,77 @@ func photoForm(t *testing.T, content []byte, roomIDs ...int64) (*bytes.Buffer, s
 		t.Fatal(err)
 	}
 	return &buf, mw.FormDataContentType()
+}
+
+func TestCreateCheckinWithBuddies(t *testing.T) {
+	e := newEnv()
+	room := e.createRoom(t, 1, domain.RoomOpen)
+	e.users.users[2] = domain.User{ID: 2, FirstName: "Ann"}
+	e.users.users[3] = domain.User{ID: 3, FirstName: "Bob"}
+	if err := e.rooms.Join(t.Context(), room.ID, 2); err != nil {
+		t.Fatal(err)
+	}
+
+	// 3 never joined this room, so tagging them is quietly dropped instead of failing the checkin
+	rec := e.do(t, "POST", "/api/v1/checkins", httpapi.CreateCheckinGeoRequest{
+		RoomIDs: []int64{room.ID}, BuddyIDs: []int64{2, 3}, Geo: checkin.Geo{Lat: 55, Lon: 37},
+	}, reqOpts{userID: 1})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("checkin: %d %s", rec.Code, rec.Body.String())
+	}
+	list := decode[[]checkin.Checkin](t, rec)
+	if len(list) != 1 || len(list[0].Buddies) != 1 || list[0].Buddies[0].ID != 2 {
+		t.Fatalf("buddies = %+v, want only the room member", list[0].Buddies)
+	}
+}
+
+func TestBuddyTagging(t *testing.T) {
+	e := newEnv()
+	room := e.createRoom(t, 1, domain.RoomOpen)
+	e.users.users[2] = domain.User{ID: 2, FirstName: "Ann"}
+	if err := e.rooms.Join(t.Context(), room.ID, 2); err != nil {
+		t.Fatal(err)
+	}
+
+	buf, ct := photoForm(t, pngBytes, room.ID)
+	rec := e.do(t, "POST", "/api/v1/checkins", buf, reqOpts{userID: 1, contentType: ct})
+	id := decode[[]checkin.Checkin](t, rec)[0].ID
+
+	rec = e.do(t, "POST", "/api/v1/checkins/"+id+"/buddies",
+		httpapi.BuddiesRequest{UserIDs: []int64{2}}, reqOpts{userID: 1})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("tag: %d %s", rec.Code, rec.Body.String())
+	}
+	if buddies := decode[[]domain.User](t, rec); len(buddies) != 1 || buddies[0].ID != 2 {
+		t.Fatalf("buddies = %+v", buddies)
+	}
+
+	// tagging twice is how the "add more" button behaves, and must not duplicate anyone
+	rec = e.do(t, "POST", "/api/v1/checkins/"+id+"/buddies",
+		httpapi.BuddiesRequest{UserIDs: []int64{2}}, reqOpts{userID: 1})
+	if buddies := decode[[]domain.User](t, rec); len(buddies) != 1 {
+		t.Errorf("buddies after a repeat tag = %+v, want one", buddies)
+	}
+
+	rec = e.do(t, "POST", "/api/v1/checkins/"+id+"/buddies",
+		httpapi.BuddiesRequest{UserIDs: []int64{1}}, reqOpts{userID: 1})
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("self tag: %d, want 400", rec.Code)
+	}
+
+	rec = e.do(t, "POST", "/api/v1/checkins/"+id+"/buddies",
+		httpapi.BuddiesRequest{UserIDs: []int64{2}}, reqOpts{userID: 2})
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("tag on someone else's checkin: %d, want 403", rec.Code)
+	}
+
+	rec = e.do(t, "DELETE", "/api/v1/checkins/"+id+"/buddies/2", nil, reqOpts{userID: 1})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("untag: %d %s", rec.Code, rec.Body.String())
+	}
+	if buddies := decode[[]domain.User](t, rec); len(buddies) != 0 {
+		t.Errorf("buddies after untag = %+v", buddies)
+	}
 }
 
 func TestCreateCheckinPhoto(t *testing.T) {

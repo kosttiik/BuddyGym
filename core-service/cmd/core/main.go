@@ -142,6 +142,7 @@ func run(log *slog.Logger) error {
 	rooms := storage.NewRooms(pool)
 	checkinClient := checkin.NewClient(conn)
 	results := storage.NewResults(pool)
+	buddies := storage.NewBuddies(pool)
 
 	// avatars are optional: without object storage the mini app falls back to initials.
 	// these stay interface-typed so a disabled mirror is a nil interface, not a typed nil.
@@ -163,6 +164,7 @@ func run(log *slog.Logger) error {
 		Users:          users,
 		Rooms:          rooms,
 		Streaks:        results,
+		Buddies:        buddies,
 		Checkins:       checkinClient,
 		Avatars:        avatarStore,
 		AvatarMirror:   avatarMirror,
@@ -191,7 +193,7 @@ func run(log *slog.Logger) error {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	grpcSrv := grpc.NewServer()
-	pbv1.RegisterCoreInternalServiceServer(grpcSrv, grpcserver.New(users, rooms, results, log))
+	pbv1.RegisterCoreInternalServiceServer(grpcSrv, grpcserver.New(users, rooms, results, buddies, log))
 	reflection.Register(grpcSrv)
 
 	reaper := roomreaper.New(roomreaper.Options{

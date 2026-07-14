@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strconv"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -26,6 +27,10 @@ type RoomsRepo interface {
 	MemberIDs(ctx context.Context, roomID int64) ([]int64, error)
 }
 
+type BuddiesRepo interface {
+	UserIDs(ctx context.Context, checkinID string) ([]int64, error)
+}
+
 type ResultsRepo interface {
 	Apply(ctx context.Context, checkinID string, roomID, userID int64, status string, createdAt time.Time) (bool, error)
 	TotalApproved(ctx context.Context, userID int64) (int, error)
@@ -38,15 +43,16 @@ type Server struct {
 	users   UsersRepo
 	rooms   RoomsRepo
 	results ResultsRepo
+	buddies BuddiesRepo
 	log     *slog.Logger
 	now     func() time.Time
 }
 
-func New(users UsersRepo, rooms RoomsRepo, results ResultsRepo, log *slog.Logger) *Server {
+func New(users UsersRepo, rooms RoomsRepo, results ResultsRepo, buddies BuddiesRepo, log *slog.Logger) *Server {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Server{users: users, rooms: rooms, results: results, log: log, now: time.Now}
+	return &Server{users: users, rooms: rooms, results: results, buddies: buddies, log: log, now: time.Now}
 }
 
 var resultNames = map[pbv1.CheckinStatus]string{
@@ -83,6 +89,9 @@ func (s *Server) ApplyCheckinResult(ctx context.Context, req *pbv1.ApplyCheckinR
 			// counter is already committed, do not fail the call over rewards
 			s.log.Error("grant rewards", "err", err, "user_id", req.GetUserId())
 		}
+		if err := s.creditBuddies(ctx, req.GetCheckinId(), req.GetRoomId(), createdAt); err != nil {
+			s.log.Error("credit buddies", "err", err, "checkin_id", req.GetCheckinId())
+		}
 	}
 
 	count, err := s.results.PeriodCount(ctx, req.GetRoomId(), req.GetUserId())
@@ -94,6 +103,31 @@ func (s *Server) ApplyCheckinResult(ctx context.Context, req *pbv1.ApplyCheckinR
 		WorkoutsCount:       int32(count),
 		GrantedAchievements: granted,
 	}, nil
+}
+
+// creditBuddies gives everyone tagged on the checkin the same workout, once the room has
+// approved it. The synthetic checkin id reuses the whole existing pipeline: the primary key on
+// checkin_results makes a redelivered result a no-op, the period counters derive themselves,
+// and reward() runs for the buddy exactly as if they had checked in on their own.
+func (s *Server) creditBuddies(ctx context.Context, checkinID string, roomID int64, createdAt time.Time) error {
+	buddyIDs, err := s.buddies.UserIDs(ctx, checkinID)
+	if err != nil {
+		return err
+	}
+	for _, buddyID := range buddyIDs {
+		id := checkinID + "#buddy:" + strconv.FormatInt(buddyID, 10)
+		applied, err := s.results.Apply(ctx, id, roomID, buddyID, storage.ResultApproved, createdAt)
+		if err != nil {
+			return err
+		}
+		if !applied {
+			continue
+		}
+		if _, err := s.reward(ctx, buddyID); err != nil {
+			s.log.Error("grant rewards", "err", err, "user_id", buddyID)
+		}
+	}
+	return nil
 }
 
 func (s *Server) reward(ctx context.Context, userID int64) ([]string, error) {

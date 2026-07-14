@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -116,4 +117,13 @@ func (r *Users) Grant(ctx context.Context, userID int64, keys []string) ([]strin
 		return nil, err
 	}
 	return pgx.CollectRows(rows, pgx.RowTo[string])
+}
+
+// prefixed qualifies a column list with a table alias, so userColumns can be reused inside a join.
+func prefixed(alias, columns string) string {
+	parts := strings.Split(columns, ", ")
+	for i, c := range parts {
+		parts[i] = alias + "." + c
+	}
+	return strings.Join(parts, ", ")
 }

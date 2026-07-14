@@ -536,3 +536,42 @@ func TestRoomIsMarkedDeletedWhenTheLastMemberLeaves(t *testing.T) {
 		t.Error("purged room still queued")
 	}
 }
+
+func TestBuddiesTagUntag(t *testing.T) {
+	ctx := context.Background()
+	buddies := storage.NewBuddies(pool(t))
+	mustUser(t, 401)
+	mustUser(t, 402)
+	room := mustRoom(t, 401)
+
+	if err := buddies.Tag(ctx, "chk-b1", room.ID, 401, []int64{402}); err != nil {
+		t.Fatalf("Tag: %v", err)
+	}
+	// the "add more" button can be pressed twice: the same person must not be counted twice
+	if err := buddies.Tag(ctx, "chk-b1", room.ID, 401, []int64{402}); err != nil {
+		t.Fatalf("repeat Tag: %v", err)
+	}
+
+	ids, err := buddies.UserIDs(ctx, "chk-b1")
+	if err != nil || len(ids) != 1 || ids[0] != 402 {
+		t.Fatalf("UserIDs = %v (%v), want [402]", ids, err)
+	}
+
+	byCheckin, err := buddies.ForCheckins(ctx, []string{"chk-b1"})
+	if err != nil {
+		t.Fatalf("ForCheckins: %v", err)
+	}
+	if users := byCheckin["chk-b1"]; len(users) != 1 || users[0].ID != 402 {
+		t.Fatalf("ForCheckins = %+v", byCheckin)
+	}
+
+	if err := buddies.Untag(ctx, "chk-b1", 402); err != nil {
+		t.Fatalf("Untag: %v", err)
+	}
+	if ids, _ := buddies.UserIDs(ctx, "chk-b1"); len(ids) != 0 {
+		t.Errorf("UserIDs after untag = %v", ids)
+	}
+	if err := buddies.Untag(ctx, "chk-b1", 402); !errors.Is(err, storage.ErrNotFound) {
+		t.Errorf("Untag of a missing tag = %v, want ErrNotFound", err)
+	}
+}
