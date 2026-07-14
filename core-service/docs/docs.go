@@ -395,9 +395,10 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Room members only. The body is trimmed and must be 1..500 characters.",
+                "description": "Room members only. Send JSON with a body, or multipart/form-data with a \"body\" field and an optional \"photo\" file up to 5 MB. Either the text or the photo must be there.",
                 "consumes": [
-                    "application/json"
+                    "application/json",
+                    "multipart/form-data"
                 ],
                 "produces": [
                     "application/json"
@@ -415,13 +416,18 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "comment",
+                        "description": "comment (json variant)",
                         "name": "body",
                         "in": "body",
-                        "required": true,
                         "schema": {
                             "$ref": "#/definitions/httpapi.CommentRequest"
                         }
+                    },
+                    {
+                        "type": "file",
+                        "description": "attached image",
+                        "name": "photo",
+                        "in": "formData"
                     }
                 ],
                 "responses": {
@@ -494,6 +500,180 @@ const docTemplate = `{
                         "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/checkins/{id}/comments/{commentId}/like": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Idempotent: liking twice leaves one like.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "checkins"
+                ],
+                "summary": "Like a comment",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "checkin id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "comment id",
+                        "name": "commentId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/domain.Comment"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "checkins"
+                ],
+                "summary": "Remove a like from a comment",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "checkin id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "comment id",
+                        "name": "commentId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/domain.Comment"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/checkins/{id}/comments/{commentId}/photo": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Room members only. The bucket is private and the bytes are proxied by core, so browsers must fetch this with XHR rather than a plain \u003cimg src\u003e.",
+                "produces": [
+                    "image/jpeg"
+                ],
+                "tags": [
+                    "checkins"
+                ],
+                "summary": "Download a photo attached to a comment",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "checkin id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "comment id",
+                        "name": "commentId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
                         }
                     },
                     "401": {
@@ -1536,6 +1716,9 @@ const docTemplate = `{
                         "expired"
                     ]
                 },
+                "top_comment": {
+                    "$ref": "#/definitions/domain.Comment"
+                },
                 "user_id": {
                     "type": "integer"
                 },
@@ -1587,7 +1770,17 @@ const docTemplate = `{
                 "created_at": {
                     "type": "string"
                 },
+                "has_photo": {
+                    "description": "bytes come from GET /checkins/{id}/comments/{commentId}/photo, the bucket is private",
+                    "type": "boolean"
+                },
                 "id": {
+                    "type": "integer"
+                },
+                "liked_by_me": {
+                    "type": "boolean"
+                },
+                "likes": {
                     "type": "integer"
                 },
                 "user_id": {

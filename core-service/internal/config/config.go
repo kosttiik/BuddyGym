@@ -25,7 +25,9 @@ type S3Config struct {
 	AccessKey string
 	SecretKey string
 	Bucket    string
-	UseSSL    bool
+	// comment photos live apart from avatars: they have their own retention
+	CommentBucket string
+	UseSSL        bool
 }
 
 // Enabled reports whether avatar mirroring can run. Without object storage the service still
@@ -46,7 +48,8 @@ func Load() (Config, error) {
 			Endpoint:  os.Getenv("S3_ENDPOINT"),
 			AccessKey: os.Getenv("S3_ACCESS_KEY"),
 			SecretKey: os.Getenv("S3_SECRET_KEY"),
-			Bucket:    getenv("S3_AVATAR_BUCKET", "avatars"),
+			Bucket:        getenv("S3_AVATAR_BUCKET", "avatars"),
+			CommentBucket: getenv("S3_COMMENT_BUCKET", "comment-photos"),
 			UseSSL:    os.Getenv("S3_USE_SSL") == "true",
 		},
 	}

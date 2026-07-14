@@ -5,6 +5,8 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/google/uuid"
+
 	"github.com/rivo/uniseg"
 )
 
@@ -58,13 +60,19 @@ var (
 	ErrCommentTooLong = errors.New("comment must be at most 500 characters")
 )
 
-func NormalizeComment(body string) (string, error) {
+// NormalizeCommentBody allows an empty body when a photo carries the comment: a meme needs
+// no caption.
+func NormalizeCommentBody(body string, hasPhoto bool) (string, error) {
 	body = strings.TrimSpace(body)
-	if body == "" {
+	if body == "" && !hasPhoto {
 		return "", ErrCommentEmpty
 	}
 	if uniseg.GraphemeClusterCount(body) > MaxCommentLen {
 		return "", ErrCommentTooLong
 	}
 	return body, nil
+}
+
+func CommentPhotoKey() string {
+	return "comments/" + uuid.NewString()
 }

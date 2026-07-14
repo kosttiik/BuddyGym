@@ -61,16 +61,17 @@ func initDataFor(userID int64) string {
 }
 
 type env struct {
-	users    *fakeUsers
-	rooms    *fakeRooms
-	streaks  *fakeStreaks
-	buddies  *fakeBuddies
-	comments *fakeComments
-	checkins *fakeCheckins
-	avatars  *fakeAvatars
-	handler  http.Handler
-	dbErr    error
-	redisErr error
+	users         *fakeUsers
+	rooms         *fakeRooms
+	streaks       *fakeStreaks
+	buddies       *fakeBuddies
+	comments      *fakeComments
+	commentPhotos *fakeObjects
+	checkins      *fakeCheckins
+	avatars       *fakeAvatars
+	handler       http.Handler
+	dbErr         error
+	redisErr      error
 }
 
 func newEnv(opts ...func(*httpapi.Options)) *env {
@@ -83,20 +84,22 @@ func newEnv(opts ...func(*httpapi.Options)) *env {
 	}
 	e.buddies = newFakeBuddies(e.users)
 	e.comments = newFakeComments(e.users, e.rooms)
+	e.commentPhotos = newFakeObjects()
 	o := httpapi.Options{
-		Users:     e.users,
-		Rooms:     e.rooms,
-		Streaks:   e.streaks,
-		Buddies:   e.buddies,
-		Comments:  e.comments,
-		Checkins:  e.checkins,
-		Avatars:   e.avatars,
-		BotToken:  testToken,
-		AuthTTL:   24 * time.Hour,
-		JWTSecret: jwtSecret,
-		JWTTTL:    time.Hour,
-		DBPing:    func(context.Context) error { return e.dbErr },
-		RedisPing: func(context.Context) error { return e.redisErr },
+		Users:         e.users,
+		Rooms:         e.rooms,
+		Streaks:       e.streaks,
+		Buddies:       e.buddies,
+		Comments:      e.comments,
+		CommentPhotos: e.commentPhotos,
+		Checkins:      e.checkins,
+		Avatars:       e.avatars,
+		BotToken:      testToken,
+		AuthTTL:       24 * time.Hour,
+		JWTSecret:     jwtSecret,
+		JWTTTL:        time.Hour,
+		DBPing:        func(context.Context) error { return e.dbErr },
+		RedisPing:     func(context.Context) error { return e.redisErr },
 	}
 	for _, fn := range opts {
 		fn(&o)
@@ -915,17 +918,6 @@ func TestCheckinComments(t *testing.T) {
 		t.Errorf("comment = %+v, want the trimmed body and the author", comment)
 	}
 
-	rec = e.do(t, "GET", "/api/v1/checkins/"+id+"/comments", nil, reqOpts{userID: 1})
-	if list := decode[[]domain.Comment](t, rec); len(list) != 1 {
-		t.Errorf("list = %+v, want one comment", list)
-	}
-
-	// the count rides along with the feed, so a card can show it without a second request
-	rec = e.do(t, "GET", "/api/v1/rooms/"+strconv.FormatInt(room.ID, 10)+"/checkins", nil, reqOpts{userID: 1})
-	if feed := decode[[]checkin.Checkin](t, rec); len(feed) != 1 || feed[0].CommentsCount != 1 {
-		t.Errorf("feed = %+v, want comments_count 1", feed)
-	}
-
 	bad := []httpapi.CommentRequest{{Body: "   "}, {Body: strings.Repeat("я", 501)}}
 	for i, req := range bad {
 		if rec := e.do(t, "POST", "/api/v1/checkins/"+id+"/comments", req, reqOpts{userID: 2}); rec.Code != http.StatusBadRequest {
@@ -947,5 +939,96 @@ func TestCheckinComments(t *testing.T) {
 	rec = e.do(t, "GET", "/api/v1/checkins/"+id+"/comments", nil, reqOpts{userID: 1})
 	if list := decode[[]domain.Comment](t, rec); len(list) != 0 {
 		t.Errorf("list after delete = %+v", list)
+	}
+}
+
+func TestCommentLikes(t *testing.T) {
+	e := newEnv()
+	room := e.createRoom(t, 1, domain.RoomOpen)
+	e.users.users[2] = domain.User{ID: 2, FirstName: "Ann"}
+	if err := e.rooms.Join(t.Context(), room.ID, 2); err != nil {
+		t.Fatal(err)
+	}
+
+	buf, ct := photoForm(t, pngBytes, room.ID)
+	rec := e.do(t, "POST", "/api/v1/checkins", buf, reqOpts{userID: 1, contentType: ct})
+	id := decode[[]checkin.Checkin](t, rec)[0].ID
+
+	rec = e.do(t, "POST", "/api/v1/checkins/"+id+"/comments",
+		httpapi.CommentRequest{Body: "мем"}, reqOpts{userID: 2})
+	comment := decode[domain.Comment](t, rec)
+	like := "/api/v1/checkins/" + id + "/comments/" + strconv.FormatInt(comment.ID, 10) + "/like"
+
+	rec = e.do(t, "POST", like, nil, reqOpts{userID: 1})
+	if got := decode[domain.Comment](t, rec); got.Likes != 1 || !got.LikedByMe {
+		t.Fatalf("after liking = %+v, want one like and a filled heart", got)
+	}
+	// the heart is a toggle, not a counter: a double tap must not stack
+	rec = e.do(t, "POST", like, nil, reqOpts{userID: 1})
+	if got := decode[domain.Comment](t, rec); got.Likes != 1 {
+		t.Errorf("liking twice = %d likes, want 1", got.Likes)
+	}
+
+	// the card shows the most liked comment without fetching the thread
+	rec = e.do(t, "GET", "/api/v1/rooms/"+strconv.FormatInt(room.ID, 10)+"/checkins", nil, reqOpts{userID: 1})
+	feed := decode[[]checkin.Checkin](t, rec)
+	if len(feed) != 1 || feed[0].CommentsCount != 1 || feed[0].TopComment == nil {
+		t.Fatalf("feed = %+v, want a count and a top comment", feed)
+	}
+	if feed[0].TopComment.Body != "мем" {
+		t.Errorf("top comment = %+v", feed[0].TopComment)
+	}
+
+	rec = e.do(t, "DELETE", like, nil, reqOpts{userID: 1})
+	if got := decode[domain.Comment](t, rec); got.Likes != 0 || got.LikedByMe {
+		t.Errorf("after unliking = %+v, want no likes", got)
+	}
+}
+
+// A meme needs no caption: an empty body is fine when a photo carries the comment.
+func TestCommentWithPhoto(t *testing.T) {
+	e := newEnv()
+	room := e.createRoom(t, 1, domain.RoomOpen)
+
+	buf, ct := photoForm(t, pngBytes, room.ID)
+	rec := e.do(t, "POST", "/api/v1/checkins", buf, reqOpts{userID: 1, contentType: ct})
+	id := decode[[]checkin.Checkin](t, rec)[0].ID
+
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	fw, err := mw.CreateFormFile("photo", "meme.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fw.Write(pngBytes); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	rec = e.do(t, "POST", "/api/v1/checkins/"+id+"/comments", &body,
+		reqOpts{userID: 1, contentType: mw.FormDataContentType()})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("photo comment: %d %s", rec.Code, rec.Body.String())
+	}
+	comment := decode[domain.Comment](t, rec)
+	if !comment.HasPhoto || comment.Body != "" {
+		t.Fatalf("comment = %+v, want a photo and no caption", comment)
+	}
+
+	photoPath := "/api/v1/checkins/" + id + "/comments/" + strconv.FormatInt(comment.ID, 10) + "/photo"
+	rec = e.do(t, "GET", photoPath, nil, reqOpts{userID: 1})
+	if rec.Code != http.StatusOK || !bytes.Equal(rec.Body.Bytes(), pngBytes) {
+		t.Fatalf("photo: %d, %d bytes", rec.Code, rec.Body.Len())
+	}
+
+	// deleting the comment must take the object with it, not leak it into the bucket
+	del := "/api/v1/checkins/" + id + "/comments/" + strconv.FormatInt(comment.ID, 10)
+	if rec := e.do(t, "DELETE", del, nil, reqOpts{userID: 1}); rec.Code != http.StatusNoContent {
+		t.Fatalf("delete: %d", rec.Code)
+	}
+	if len(e.commentPhotos.objects) != 0 {
+		t.Errorf("objects left behind: %v", e.commentPhotos.objects)
 	}
 }

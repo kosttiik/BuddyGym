@@ -588,7 +588,7 @@ func TestCommentsDeletePermissions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mine, err := comments.Add(ctx, "chk-c1", room.ID, 502, "nice")
+	mine, err := comments.Add(ctx, "chk-c1", room.ID, 502, "nice", "")
 	if err != nil {
 		t.Fatalf("Add: %v", err)
 	}
@@ -596,25 +596,89 @@ func TestCommentsDeletePermissions(t *testing.T) {
 		t.Fatalf("comment = %+v", mine)
 	}
 
-	// a stranger cannot delete someone else's comment
-	if err := comments.Delete(ctx, mine.ID, 503); !errors.Is(err, storage.ErrNotFound) {
+	if _, err := comments.Delete(ctx, mine.ID, 503); !errors.Is(err, storage.ErrNotFound) {
 		t.Errorf("delete by a stranger = %v, want ErrNotFound", err)
 	}
 	// the room creator moderates
-	if err := comments.Delete(ctx, mine.ID, 501); err != nil {
+	if _, err := comments.Delete(ctx, mine.ID, 501); err != nil {
 		t.Errorf("delete by the room creator: %v", err)
 	}
 
-	own, err := comments.Add(ctx, "chk-c1", room.ID, 502, "again")
+	// a deleted comment must report its photo so the object can go too
+	withPhoto, err := comments.Add(ctx, "chk-c1", room.ID, 502, "", "comments/abc")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := comments.Delete(ctx, own.ID, 502); err != nil {
-		t.Errorf("delete of my own comment: %v", err)
+	if !withPhoto.HasPhoto {
+		t.Errorf("comment = %+v, want has_photo", withPhoto)
+	}
+	key, err := comments.Delete(ctx, withPhoto.ID, 502)
+	if err != nil || key != "comments/abc" {
+		t.Errorf("Delete returned %q (%v), want the photo key", key, err)
+	}
+}
+
+func TestCommentLikesAndTopComment(t *testing.T) {
+	ctx := context.Background()
+	comments := storage.NewComments(pool(t))
+	rooms := storage.NewRooms(pool(t))
+	mustUser(t, 511)
+	mustUser(t, 512)
+	mustUser(t, 513)
+	room := mustRoom(t, 511)
+	for _, id := range []int64{512, 513} {
+		if err := rooms.Join(ctx, room.ID, id); err != nil {
+			t.Fatal(err)
+		}
 	}
 
-	counts, err := comments.CountsFor(ctx, []string{"chk-c1"})
-	if err != nil || counts["chk-c1"] != 0 {
-		t.Errorf("CountsFor = %v (%v), want 0", counts, err)
+	quiet, err := comments.Add(ctx, "chk-c2", room.ID, 512, "first", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	loud, err := comments.Add(ctx, "chk-c2", room.ID, 513, "second", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := comments.Like(ctx, loud.ID, 511); err != nil {
+		t.Fatalf("Like: %v", err)
+	}
+	// liking twice is one like: the heart is a toggle, not a counter
+	if err := comments.Like(ctx, loud.ID, 511); err != nil {
+		t.Fatalf("repeat Like: %v", err)
+	}
+	if err := comments.Like(ctx, loud.ID, 512); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := comments.Get(ctx, loud.ID, 511)
+	if err != nil || got.Likes != 2 || !got.LikedByMe {
+		t.Errorf("comment = %+v (%v), want 2 likes and a filled heart", got, err)
+	}
+	if other, _ := comments.Get(ctx, loud.ID, 513); other.LikedByMe {
+		t.Error("a user who never liked it sees a filled heart")
+	}
+
+	// the card shows the most liked one over the photo
+	summaries, err := comments.Summaries(ctx, []string{"chk-c2"}, 511)
+	if err != nil {
+		t.Fatalf("Summaries: %v", err)
+	}
+	summary := summaries["chk-c2"]
+	if summary.Count != 2 || summary.Top == nil || summary.Top.ID != loud.ID {
+		t.Errorf("summary = %+v, want the most liked comment on top", summary)
+	}
+
+	if err := comments.Unlike(ctx, loud.ID, 511); err != nil {
+		t.Fatal(err)
+	}
+	if err := comments.Unlike(ctx, loud.ID, 512); err != nil {
+		t.Fatal(err)
+	}
+	// with the likes gone the oldest wins the tie
+	summaries, _ = comments.Summaries(ctx, []string{"chk-c2"}, 511)
+	if top := summaries["chk-c2"].Top; top == nil || top.ID != quiet.ID {
+		t.Errorf("top = %+v, want the oldest to break the tie", top)
 	}
 }

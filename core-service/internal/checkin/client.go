@@ -37,7 +37,8 @@ type Checkin struct {
 	Geo            *Geo       `json:"geo,omitempty"`
 	// filled in by core, not checkin-service
 	Buddies        []domain.User `json:"buddies,omitempty"`
-	CommentsCount  int           `json:"comments_count"`
+	CommentsCount  int             `json:"comments_count"`
+	TopComment     *domain.Comment `json:"top_comment,omitempty"`
 	VotesApprove   int32         `json:"votes_approve"`
 	VotesReject    int32      `json:"votes_reject"`
 	VotesRequired  int32      `json:"votes_required"`

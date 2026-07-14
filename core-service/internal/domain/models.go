@@ -62,10 +62,21 @@ type Member struct {
 }
 
 type Comment struct {
-	ID        int64     `json:"id"`
-	CheckinID string    `json:"checkin_id"`
-	UserID    int64     `json:"user_id"`
-	Author    User      `json:"author"`
-	Body      string    `json:"body"`
+	ID        int64  `json:"id"`
+	CheckinID string `json:"checkin_id"`
+	UserID    int64  `json:"user_id"`
+	Author    User   `json:"author"`
+	Body      string `json:"body"`
+	// bytes come from GET /checkins/{id}/comments/{commentId}/photo, the bucket is private
+	HasPhoto  bool      `json:"has_photo"`
+	PhotoKey  string    `json:"-"`
+	Likes     int       `json:"likes"`
+	LikedByMe bool      `json:"liked_by_me"`
 	CreatedAt time.Time `json:"created_at"`
+}
+
+// CommentSummary is what a checkin card needs: how many there are, and the one worth showing.
+type CommentSummary struct {
+	Count int      `json:"count"`
+	Top   *Comment `json:"top,omitempty"`
 }

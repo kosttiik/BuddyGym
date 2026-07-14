@@ -35,6 +35,8 @@ definitions:
         - rejected
         - expired
         type: string
+      top_comment:
+        $ref: '#/definitions/domain.Comment'
       user_id:
         type: integer
       votes_approve:
@@ -68,7 +70,15 @@ definitions:
         type: string
       created_at:
         type: string
+      has_photo:
+        description: bytes come from GET /checkins/{id}/comments/{commentId}/photo,
+          the bucket is private
+        type: boolean
       id:
+        type: integer
+      liked_by_me:
+        type: boolean
+      likes:
         type: integer
       user_id:
         type: integer
@@ -628,19 +638,25 @@ paths:
     post:
       consumes:
       - application/json
-      description: Room members only. The body is trimmed and must be 1..500 characters.
+      - multipart/form-data
+      description: Room members only. Send JSON with a body, or multipart/form-data
+        with a "body" field and an optional "photo" file up to 5 MB. Either the text
+        or the photo must be there.
       parameters:
       - description: checkin id
         in: path
         name: id
         required: true
         type: string
-      - description: comment
+      - description: comment (json variant)
         in: body
         name: body
-        required: true
         schema:
           $ref: '#/definitions/httpapi.CommentRequest'
+      - description: attached image
+        in: formData
+        name: photo
+        type: file
       produces:
       - application/json
       responses:
@@ -706,6 +722,119 @@ paths:
       security:
       - BearerAuth: []
       summary: Delete a comment
+      tags:
+      - checkins
+  /checkins/{id}/comments/{commentId}/like:
+    delete:
+      parameters:
+      - description: checkin id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: comment id
+        in: path
+        name: commentId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.Comment'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Remove a like from a comment
+      tags:
+      - checkins
+    post:
+      description: 'Idempotent: liking twice leaves one like.'
+      parameters:
+      - description: checkin id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: comment id
+        in: path
+        name: commentId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.Comment'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Like a comment
+      tags:
+      - checkins
+  /checkins/{id}/comments/{commentId}/photo:
+    get:
+      description: Room members only. The bucket is private and the bytes are proxied
+        by core, so browsers must fetch this with XHR rather than a plain <img src>.
+      parameters:
+      - description: checkin id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: comment id
+        in: path
+        name: commentId
+        required: true
+        type: integer
+      produces:
+      - image/jpeg
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Download a photo attached to a comment
       tags:
       - checkins
   /checkins/{id}/photo:

@@ -52,10 +52,19 @@ type BuddiesRepo interface {
 }
 
 type CommentsRepo interface {
-	Add(ctx context.Context, checkinID string, roomID, userID int64, body string) (domain.Comment, error)
-	List(ctx context.Context, checkinID string, limit, offset int) ([]domain.Comment, error)
-	Delete(ctx context.Context, id, userID int64) error
-	CountsFor(ctx context.Context, checkinIDs []string) (map[string]int, error)
+	Add(ctx context.Context, checkinID string, roomID, userID int64, body, photoKey string) (domain.Comment, error)
+	Get(ctx context.Context, id, viewerID int64) (domain.Comment, error)
+	List(ctx context.Context, checkinID string, viewerID int64, limit, offset int) ([]domain.Comment, error)
+	Delete(ctx context.Context, id, userID int64) (photoKey string, err error)
+	Like(ctx context.Context, commentID, userID int64) error
+	Unlike(ctx context.Context, commentID, userID int64) error
+	Summaries(ctx context.Context, checkinIDs []string, viewerID int64) (map[string]domain.CommentSummary, error)
+}
+
+type ObjectStore interface {
+	Put(ctx context.Context, key string, data []byte) error
+	Open(ctx context.Context, key string) (io.ReadCloser, string, error)
+	Delete(ctx context.Context, key string) error
 }
 
 type StreaksRepo interface {
@@ -78,20 +87,21 @@ type RateLimiter interface {
 }
 
 type Server struct {
-	users        UsersRepo
-	rooms        RoomsRepo
-	streaks      StreaksRepo
-	buddies      BuddiesRepo
-	comments     CommentsRepo
-	checkins     CheckinClient
-	avatars      AvatarStore
-	avatarMirror AvatarMirror
-	botToken    string
-	authTTL     time.Duration
-	jwtSecret   []byte
-	jwtTTL      time.Duration
-	authLimiter RateLimiter
-	apiLimiter  RateLimiter
+	users         UsersRepo
+	rooms         RoomsRepo
+	streaks       StreaksRepo
+	buddies       BuddiesRepo
+	comments      CommentsRepo
+	commentPhotos ObjectStore
+	checkins      CheckinClient
+	avatars       AvatarStore
+	avatarMirror  AvatarMirror
+	botToken      string
+	authTTL       time.Duration
+	jwtSecret     []byte
+	jwtTTL        time.Duration
+	authLimiter   RateLimiter
+	apiLimiter    RateLimiter
 	// checkin creation is the expensive path: it ships a photo over gRPC and into
 	// object storage, so it gets its own tighter per-user budget
 	checkinLimiter RateLimiter
@@ -107,6 +117,7 @@ type Options struct {
 	Streaks        StreaksRepo
 	Buddies        BuddiesRepo
 	Comments       CommentsRepo
+	CommentPhotos  ObjectStore
 	Checkins       CheckinClient
 	Avatars        AvatarStore
 	AvatarMirror   AvatarMirror
@@ -136,6 +147,7 @@ func New(opts Options) *Server {
 		streaks:        opts.Streaks,
 		buddies:        opts.Buddies,
 		comments:       opts.Comments,
+		commentPhotos:  opts.CommentPhotos,
 		checkins:       opts.Checkins,
 		avatars:        opts.Avatars,
 		avatarMirror:   opts.AvatarMirror,
@@ -184,6 +196,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/checkins/{id}/comments", s.withAuth(s.handleListComments))
 	mux.HandleFunc("POST /api/v1/checkins/{id}/comments", s.withAuth(s.handleAddComment))
 	mux.HandleFunc("DELETE /api/v1/checkins/{id}/comments/{commentId}", s.withAuth(s.handleDeleteComment))
+	mux.HandleFunc("POST /api/v1/checkins/{id}/comments/{commentId}/like", s.withAuth(s.handleLikeComment))
+	mux.HandleFunc("DELETE /api/v1/checkins/{id}/comments/{commentId}/like", s.withAuth(s.handleUnlikeComment))
+	mux.HandleFunc("GET /api/v1/checkins/{id}/comments/{commentId}/photo", s.withAuth(s.handleGetCommentPhoto))
 
 	return s.withLogging(mux)
 }
