@@ -9,13 +9,18 @@ const (
 )
 
 type User struct {
-	ID        int64     `json:"id"`
-	Username  string    `json:"username"`
-	FirstName string    `json:"first_name"`
+	ID        int64  `json:"id"`
+	Username  string `json:"username"`
+	FirstName string `json:"first_name"`
+	// the telegram URL, unreachable for our users. Kept as the mirror change signal, not for display.
 	PhotoURL  string    `json:"photo_url"`
 	Theme     string    `json:"theme"`
 	Status    string    `json:"status"`
 	CreatedAt time.Time `json:"created_at"`
+	// clients read the bytes from GET /users/{id}/avatar, never from object storage directly
+	HasAvatar    bool   `json:"has_avatar"`
+	AvatarKey    string `json:"-"`
+	AvatarSource string `json:"-"`
 }
 
 type Achievement struct {

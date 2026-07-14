@@ -3,6 +3,7 @@ package httpapi
 
 import (
 	"context"
+	"io"
 	"log/slog"
 	"net/http"
 	"time"
@@ -34,6 +35,15 @@ type RoomsRepo interface {
 	Leave(ctx context.Context, roomID, userID int64) error
 }
 
+type AvatarStore interface {
+	Open(ctx context.Context, key string) (io.ReadCloser, string, error)
+}
+
+// AvatarMirror refreshes a mirrored avatar when Telegram reports a new photo_url.
+type AvatarMirror interface {
+	SyncInBackground(userID int64, photoURL, mirroredFrom string)
+}
+
 type CheckinClient interface {
 	Create(ctx context.Context, userID int64, targets []checkin.Target, photo []byte, geo *checkin.Geo) ([]checkin.Checkin, error)
 	Get(ctx context.Context, id string) (checkin.Checkin, error)
@@ -49,9 +59,11 @@ type RateLimiter interface {
 }
 
 type Server struct {
-	users       UsersRepo
-	rooms       RoomsRepo
-	checkins    CheckinClient
+	users        UsersRepo
+	rooms        RoomsRepo
+	checkins     CheckinClient
+	avatars      AvatarStore
+	avatarMirror AvatarMirror
 	botToken    string
 	authTTL     time.Duration
 	jwtSecret   []byte
@@ -71,6 +83,8 @@ type Options struct {
 	Users          UsersRepo
 	Rooms          RoomsRepo
 	Checkins       CheckinClient
+	Avatars        AvatarStore
+	AvatarMirror   AvatarMirror
 	BotToken       string
 	AuthTTL        time.Duration
 	JWTSecret      []byte
@@ -95,6 +109,8 @@ func New(opts Options) *Server {
 		users:          opts.Users,
 		rooms:          opts.Rooms,
 		checkins:       opts.Checkins,
+		avatars:        opts.Avatars,
+		avatarMirror:   opts.AvatarMirror,
 		botToken:       opts.BotToken,
 		authTTL:        opts.AuthTTL,
 		jwtSecret:      opts.JWTSecret,
@@ -119,6 +135,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/v1/me", s.withAuth(s.handlePatchMe))
 
 	mux.HandleFunc("GET /api/v1/users/{id}", s.withAuth(s.handleGetUser))
+	mux.HandleFunc("GET /api/v1/users/{id}/avatar", s.withAuth(s.handleGetAvatar))
 
 	mux.HandleFunc("POST /api/v1/rooms", s.withAuth(s.handleCreateRoom))
 	mux.HandleFunc("GET /api/v1/rooms", s.withAuth(s.handleListRooms))

@@ -18,14 +18,16 @@ func NewUsers(pool *pgxpool.Pool) *Users {
 	return &Users{pool: pool}
 }
 
-const userColumns = "id, username, first_name, photo_url, theme, status, created_at"
+const userColumns = "id, username, first_name, photo_url, theme, status, created_at, avatar_key, avatar_source"
 
 func scanUser(row pgx.Row) (domain.User, error) {
 	var u domain.User
-	err := row.Scan(&u.ID, &u.Username, &u.FirstName, &u.PhotoURL, &u.Theme, &u.Status, &u.CreatedAt)
+	err := row.Scan(&u.ID, &u.Username, &u.FirstName, &u.PhotoURL, &u.Theme, &u.Status, &u.CreatedAt,
+		&u.AvatarKey, &u.AvatarSource)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.User{}, ErrNotFound
 	}
+	u.HasAvatar = u.AvatarKey != ""
 	return u, err
 }
 
@@ -48,6 +50,12 @@ func (r *Users) Get(ctx context.Context, id int64) (domain.User, error) {
 func (r *Users) UpdateTheme(ctx context.Context, id int64, theme string) (domain.User, error) {
 	return scanUser(r.pool.QueryRow(ctx,
 		"UPDATE users SET theme = $2 WHERE id = $1 RETURNING "+userColumns, id, theme))
+}
+
+func (r *Users) SetAvatar(ctx context.Context, id int64, key, source string) error {
+	_, err := r.pool.Exec(ctx,
+		"UPDATE users SET avatar_key = $2, avatar_source = $3 WHERE id = $1", id, key, source)
+	return err
 }
 
 func (r *Users) SetStatus(ctx context.Context, id int64, status string) error {

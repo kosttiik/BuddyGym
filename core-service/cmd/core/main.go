@@ -22,6 +22,7 @@ import (
 	pbv1 "github.com/kosttiik/BuddyGym/core-service/internal/pb/buddygym/v1"
 
 	_ "github.com/kosttiik/BuddyGym/core-service/docs"
+	"github.com/kosttiik/BuddyGym/core-service/internal/avatar"
 	"github.com/kosttiik/BuddyGym/core-service/internal/checkin"
 	"github.com/kosttiik/BuddyGym/core-service/internal/config"
 	"github.com/kosttiik/BuddyGym/core-service/internal/grpcserver"
@@ -88,10 +89,28 @@ func run(log *slog.Logger) error {
 	checkinClient := checkin.NewClient(conn)
 	results := storage.NewResults(pool)
 
+	// avatars are optional: without object storage the mini app falls back to initials.
+	// these stay interface-typed so a disabled mirror is a nil interface, not a typed nil.
+	var avatarStore httpapi.AvatarStore
+	var avatarMirror httpapi.AvatarMirror
+	if cfg.S3.Enabled() {
+		store, err := avatar.NewStore(ctx, avatar.StoreConfig(cfg.S3))
+		if err != nil {
+			return err
+		}
+		avatarStore = store
+		avatarMirror = avatar.NewMirror(users, avatar.NewTelegram(cfg.BotToken, nil), store, log)
+		log.Info("avatar mirror ready", "bucket", cfg.S3.Bucket)
+	} else {
+		log.Warn("object storage not configured, avatars disabled")
+	}
+
 	api := httpapi.New(httpapi.Options{
 		Users:          users,
 		Rooms:          rooms,
 		Checkins:       checkinClient,
+		Avatars:        avatarStore,
+		AvatarMirror:   avatarMirror,
 		BotToken:       cfg.BotToken,
 		AuthTTL:        cfg.AuthTTL,
 		JWTSecret:      cfg.JWTSecret,
