@@ -3,6 +3,7 @@ syntax = "proto3";
 package buddygym.v1;
 
 import "buddygym/v1/checkin.proto";
+import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/kosttiik/BuddyGym/core-service/internal/pb/buddygym/v1;pbv1";
 
@@ -18,6 +19,8 @@ message ApplyCheckinResultRequest {
   int64 room_id = 2;
   int64 user_id = 3;
   CheckinStatus status = 4;
+  // when the workout was logged, not when voting finished: core buckets days by this
+  google.protobuf.Timestamp checkin_created_at = 5;
 }
 
 message ApplyCheckinResultResponse {

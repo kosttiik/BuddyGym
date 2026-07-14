@@ -275,11 +275,11 @@ func TestResultsApplyIdempotent(t *testing.T) {
 	mustUser(t, 106)
 	room := mustRoom(t, 106)
 
-	applied, err := results.Apply(ctx, "chk-1", room.ID, 106, storage.ResultApproved)
+	applied, err := results.Apply(ctx, "chk-1", room.ID, 106, storage.ResultApproved, time.Now())
 	if err != nil || !applied {
 		t.Fatalf("Apply: %v, applied=%v", err, applied)
 	}
-	applied, err = results.Apply(ctx, "chk-1", room.ID, 106, storage.ResultApproved)
+	applied, err = results.Apply(ctx, "chk-1", room.ID, 106, storage.ResultApproved, time.Now())
 	if err != nil || applied {
 		t.Fatalf("repeat Apply: %v, applied=%v, want false", err, applied)
 	}
@@ -293,7 +293,7 @@ func TestResultsApplyIdempotent(t *testing.T) {
 		t.Errorf("TotalApproved = %d (%v), want 1", total, err)
 	}
 
-	applied, err = results.Apply(ctx, "chk-2", room.ID, 106, storage.ResultRejected)
+	applied, err = results.Apply(ctx, "chk-2", room.ID, 106, storage.ResultRejected, time.Now())
 	if err != nil || !applied {
 		t.Fatalf("Apply rejected: %v", err)
 	}
@@ -311,10 +311,10 @@ func TestResultsPeriodRollover(t *testing.T) {
 	mustUser(t, 107)
 	room := mustRoom(t, 107)
 
-	if _, err := results.Apply(ctx, "chk-r1", room.ID, 107, storage.ResultApproved); err != nil {
+	if _, err := results.Apply(ctx, "chk-r1", room.ID, 107, storage.ResultApproved, time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := results.Apply(ctx, "chk-r2", room.ID, 107, storage.ResultApproved); err != nil {
+	if _, err := results.Apply(ctx, "chk-r2", room.ID, 107, storage.ResultApproved, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -328,7 +328,7 @@ func TestResultsPeriodRollover(t *testing.T) {
 		t.Errorf("stale period count = %d, want 0", count)
 	}
 
-	if _, err := results.Apply(ctx, "chk-r3", room.ID, 107, storage.ResultApproved); err != nil {
+	if _, err := results.Apply(ctx, "chk-r3", room.ID, 107, storage.ResultApproved, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	if count, _ := results.PeriodCount(ctx, room.ID, 107); count != 1 {
@@ -345,19 +345,15 @@ func TestResultsWorkoutDays(t *testing.T) {
 	mustUser(t, 108)
 	room := mustRoom(t, 108)
 
+	now := time.Now()
 	for i, id := range []string{"chk-d1", "chk-d2", "chk-d3"} {
-		if _, err := results.Apply(ctx, id, room.ID, 108, storage.ResultApproved); err != nil {
-			t.Fatal(err)
-		}
-		_, err := pool(t).Exec(ctx,
-			"UPDATE checkin_results SET applied_at = now() - $2::int * interval '1 day' WHERE checkin_id = $1",
-			id, i)
-		if err != nil {
+		day := now.AddDate(0, 0, -i)
+		if _, err := results.Apply(ctx, id, room.ID, 108, storage.ResultApproved, day); err != nil {
 			t.Fatal(err)
 		}
 	}
 	// same day duplicate must collapse into one date
-	if _, err := results.Apply(ctx, "chk-d4", room.ID, 108, storage.ResultApproved); err != nil {
+	if _, err := results.Apply(ctx, "chk-d4", room.ID, 108, storage.ResultApproved, now); err != nil {
 		t.Fatal(err)
 	}
 
@@ -385,7 +381,7 @@ func TestResultsPeriodCountCollapsesSameDayCheckins(t *testing.T) {
 	room := mustRoom(t, 110)
 
 	for _, id := range []string{"chk-same-day-1", "chk-same-day-2"} {
-		if _, err := results.Apply(ctx, id, room.ID, 110, storage.ResultApproved); err != nil {
+		if _, err := results.Apply(ctx, id, room.ID, 110, storage.ResultApproved, time.Now()); err != nil {
 			t.Fatal(err)
 		}
 	}

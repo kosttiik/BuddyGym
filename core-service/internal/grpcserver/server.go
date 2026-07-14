@@ -30,7 +30,7 @@ type RoomsRepo interface {
 }
 
 type ResultsRepo interface {
-	Apply(ctx context.Context, checkinID string, roomID, userID int64, status string) (bool, error)
+	Apply(ctx context.Context, checkinID string, roomID, userID int64, status string, createdAt time.Time) (bool, error)
 	TotalApproved(ctx context.Context, userID int64) (int, error)
 	WorkoutDays(ctx context.Context, userID int64, limit int) ([]time.Time, error)
 	PeriodCount(ctx context.Context, roomID, userID int64) (int, error)
@@ -67,7 +67,13 @@ func (s *Server) ApplyCheckinResult(ctx context.Context, req *pbv1.ApplyCheckinR
 		return nil, status.Error(codes.InvalidArgument, "status must be a final one")
 	}
 
-	applied, err := s.results.Apply(ctx, req.GetCheckinId(), req.GetRoomId(), req.GetUserId(), result)
+	// an older checkin-service sends no workout time; now() keeps core deployable ahead of it
+	createdAt := s.now()
+	if ts := req.GetCheckinCreatedAt(); ts.IsValid() {
+		createdAt = ts.AsTime()
+	}
+
+	applied, err := s.results.Apply(ctx, req.GetCheckinId(), req.GetRoomId(), req.GetUserId(), result, createdAt)
 	if err != nil {
 		s.log.Error("apply checkin result", "err", err, "checkin_id", req.GetCheckinId())
 		return nil, status.Error(codes.Internal, "apply failed")
