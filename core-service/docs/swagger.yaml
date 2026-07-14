@@ -71,6 +71,8 @@ definitions:
         type: string
       status:
         type: string
+      streak:
+        type: integer
       theme:
         type: string
       username:
@@ -118,6 +120,8 @@ definitions:
       name:
         type: string
       period_days:
+        type: integer
+      streak:
         type: integer
       votes_required:
         type: integer
@@ -229,6 +233,9 @@ definitions:
         items:
           $ref: '#/definitions/domain.Achievement'
         type: array
+      best_streak:
+        description: highest streak across the user rooms
+        type: integer
       user:
         $ref: '#/definitions/domain.User'
     type: object
@@ -284,6 +291,8 @@ definitions:
         items:
           $ref: '#/definitions/domain.Achievement'
         type: array
+      best_streak:
+        type: integer
       user:
         $ref: '#/definitions/domain.User'
     type: object

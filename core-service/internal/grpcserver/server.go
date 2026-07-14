@@ -16,9 +16,6 @@ import (
 	"github.com/kosttiik/BuddyGym/core-service/internal/storage"
 )
 
-// enough history for streak evaluation
-const streakWindow = 400
-
 type UsersRepo interface {
 	Grant(ctx context.Context, userID int64, keys []string) ([]string, error)
 	SetStatus(ctx context.Context, id int64, status string) error
@@ -32,7 +29,7 @@ type RoomsRepo interface {
 type ResultsRepo interface {
 	Apply(ctx context.Context, checkinID string, roomID, userID int64, status string, createdAt time.Time) (bool, error)
 	TotalApproved(ctx context.Context, userID int64) (int, error)
-	WorkoutDays(ctx context.Context, userID int64, limit int) ([]time.Time, error)
+	StreaksByUser(ctx context.Context, userID int64) ([]domain.StreakInput, error)
 	PeriodCount(ctx context.Context, roomID, userID int64) (int, error)
 }
 
@@ -104,11 +101,11 @@ func (s *Server) reward(ctx context.Context, userID int64) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	days, err := s.results.WorkoutDays(ctx, userID, streakWindow)
+	streaks, err := s.results.StreaksByUser(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	earned := domain.EarnedAchievements(total, domain.Streak(days, s.now()))
+	earned := domain.EarnedAchievements(total, domain.BestStreak(streaks, s.now()))
 	granted, err := s.users.Grant(ctx, userID, earned)
 	if err != nil {
 		return nil, err

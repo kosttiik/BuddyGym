@@ -87,8 +87,16 @@ func (f *fakeResults) TotalApproved(_ context.Context, userID int64) (int, error
 	return len(f.days[userID]), nil
 }
 
-func (f *fakeResults) WorkoutDays(_ context.Context, userID int64, _ int) ([]time.Time, error) {
-	return f.days[userID], nil
+func (f *fakeResults) StreaksByUser(_ context.Context, userID int64) ([]domain.StreakInput, error) {
+	days := f.days[userID]
+	if len(days) == 0 {
+		return nil, nil
+	}
+	// one workout a day against a goal of one a day: the streak is the run of days
+	return []domain.StreakInput{{
+		RoomID: 1, UserID: userID, Goal: 1, PeriodDays: 1,
+		JoinedAt: days[len(days)-1], Days: days,
+	}}, nil
 }
 
 func (f *fakeResults) PeriodCount(_ context.Context, roomID, userID int64) (int, error) {

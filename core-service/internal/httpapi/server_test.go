@@ -63,6 +63,7 @@ func initDataFor(userID int64) string {
 type env struct {
 	users    *fakeUsers
 	rooms    *fakeRooms
+	streaks  *fakeStreaks
 	checkins *fakeCheckins
 	avatars  *fakeAvatars
 	handler  http.Handler
@@ -74,12 +75,14 @@ func newEnv(opts ...func(*httpapi.Options)) *env {
 	e := &env{
 		users:    newFakeUsers(),
 		rooms:    newFakeRooms(),
+		streaks:  newFakeStreaks(),
 		checkins: newFakeCheckins(),
 		avatars:  newFakeAvatars(),
 	}
 	o := httpapi.Options{
 		Users:     e.users,
 		Rooms:     e.rooms,
+		Streaks:   e.streaks,
 		Checkins:  e.checkins,
 		Avatars:   e.avatars,
 		BotToken:  testToken,
@@ -374,6 +377,29 @@ func TestGetAvatar(t *testing.T) {
 	rec = e.do(t, "GET", "/api/v1/users/10/avatar", nil, reqOpts{userID: 1})
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("avatar of a user without one: %d, want 404", rec.Code)
+	}
+}
+
+func TestStreakReachesTheClient(t *testing.T) {
+	e := newEnv()
+	room := e.createRoom(t, 1, domain.RoomOpen)
+	e.streaks.set(room.ID, 1, 5)
+
+	rec := e.do(t, "GET", "/api/v1/rooms/"+strconv.FormatInt(room.ID, 10), nil, reqOpts{userID: 1})
+	detail := decode[httpapi.RoomDetailResponse](t, rec)
+	if len(detail.Members) != 1 || detail.Members[0].Streak != 5 {
+		t.Errorf("member streak = %+v, want 5", detail.Members)
+	}
+
+	rec = e.do(t, "GET", "/api/v1/rooms", nil, reqOpts{userID: 1})
+	rooms := decode[[]domain.RoomWithProgress](t, rec)
+	if len(rooms) != 1 || rooms[0].Streak != 5 {
+		t.Errorf("room streak = %+v, want 5", rooms)
+	}
+
+	rec = e.do(t, "GET", "/api/v1/me", nil, reqOpts{userID: 1})
+	if me := decode[httpapi.MeResponse](t, rec); me.BestStreak != 5 {
+		t.Errorf("best streak = %d, want 5", me.BestStreak)
 	}
 }
 

@@ -3,10 +3,13 @@ package storage
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/kosttiik/BuddyGym/core-service/internal/domain"
 )
 
 const (
@@ -75,18 +78,57 @@ func (r *Results) TotalApproved(ctx context.Context, userID int64) (int, error) 
 	return n, err
 }
 
-// WorkoutDays returns distinct UTC dates of approved checkins, newest first.
-func (r *Results) WorkoutDays(ctx context.Context, userID int64, limit int) ([]time.Time, error) {
-	rows, err := r.pool.Query(ctx, `
-		SELECT DISTINCT (checkin_created_at AT TIME ZONE 'UTC')::date AS day
-		FROM checkin_results
-		WHERE user_id = $1 AND status = $2
-		ORDER BY day DESC
-		LIMIT $3`, userID, ResultApproved, limit)
+const streakInputQuery = `
+	SELECT m.room_id, m.user_id, r.goal_per_period, r.period_days, m.joined_at,
+	       (cr.checkin_created_at AT TIME ZONE 'UTC')::date AS day
+	FROM memberships m
+	JOIN rooms r ON r.id = m.room_id
+	LEFT JOIN checkin_results cr
+	       ON cr.room_id = m.room_id AND cr.user_id = m.user_id AND cr.status = 'approved'
+	WHERE r.deleted_at IS NULL AND %s
+	GROUP BY m.room_id, m.user_id, r.goal_per_period, r.period_days, m.joined_at, day
+	ORDER BY m.room_id, m.user_id, day`
+
+// StreaksByRoom returns one input per member of the room.
+func (r *Results) StreaksByRoom(ctx context.Context, roomID int64) ([]domain.StreakInput, error) {
+	return r.streakInputs(ctx, fmt.Sprintf(streakInputQuery, "m.room_id = $1"), roomID)
+}
+
+// StreaksByUser returns one input per room the user belongs to.
+func (r *Results) StreaksByUser(ctx context.Context, userID int64) ([]domain.StreakInput, error) {
+	return r.streakInputs(ctx, fmt.Sprintf(streakInputQuery, "m.user_id = $1"), userID)
+}
+
+func (r *Results) streakInputs(ctx context.Context, query string, arg int64) ([]domain.StreakInput, error) {
+	rows, err := r.pool.Query(ctx, query, arg)
 	if err != nil {
 		return nil, err
 	}
-	return pgx.CollectRows(rows, pgx.RowTo[time.Time])
+	defer rows.Close()
+
+	var out []domain.StreakInput
+	for rows.Next() {
+		var roomID, userID int64
+		var goal, periodDays int
+		var joinedAt time.Time
+		// members with no approved checkin yet come back from the LEFT JOIN with a null day
+		var day *time.Time
+		if err := rows.Scan(&roomID, &userID, &goal, &periodDays, &joinedAt, &day); err != nil {
+			return nil, err
+		}
+		if n := len(out); n > 0 && out[n-1].RoomID == roomID && out[n-1].UserID == userID {
+			if day != nil {
+				out[n-1].Days = append(out[n-1].Days, *day)
+			}
+			continue
+		}
+		in := domain.StreakInput{RoomID: roomID, UserID: userID, Goal: goal, PeriodDays: periodDays, JoinedAt: joinedAt}
+		if day != nil {
+			in.Days = []time.Time{*day}
+		}
+		out = append(out, in)
+	}
+	return out, rows.Err()
 }
 
 func (r *Results) PeriodCount(ctx context.Context, roomID, userID int64) (int, error) {

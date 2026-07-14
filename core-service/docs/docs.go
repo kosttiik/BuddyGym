@@ -1238,6 +1238,9 @@ const docTemplate = `{
                 "status": {
                     "type": "string"
                 },
+                "streak": {
+                    "type": "integer"
+                },
                 "theme": {
                     "type": "string"
                 },
@@ -1309,6 +1312,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "period_days": {
+                    "type": "integer"
+                },
+                "streak": {
                     "type": "integer"
                 },
                 "votes_required": {
@@ -1467,6 +1473,10 @@ const docTemplate = `{
                         "$ref": "#/definitions/domain.Achievement"
                     }
                 },
+                "best_streak": {
+                    "description": "highest streak across the user rooms",
+                    "type": "integer"
+                },
                 "user": {
                     "$ref": "#/definitions/domain.User"
                 }
@@ -1543,6 +1553,9 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/domain.Achievement"
                     }
+                },
+                "best_streak": {
+                    "type": "integer"
                 },
                 "user": {
                     "$ref": "#/definitions/domain.User"
