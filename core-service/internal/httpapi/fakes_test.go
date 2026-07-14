@@ -77,7 +77,7 @@ func newFakeUsers() *fakeUsers {
 func (f *fakeUsers) Upsert(_ context.Context, id int64, username, firstName, photoURL string) (domain.User, error) {
 	u, ok := f.users[id]
 	if !ok {
-		u = domain.User{ID: id, Theme: "default", Status: domain.StatusNovice, CreatedAt: time.Now()}
+		u = domain.User{ID: id, Theme: "default", Rank: domain.RankNovice, CreatedAt: time.Now()}
 	}
 	u.Username, u.FirstName, u.PhotoURL = username, firstName, photoURL
 	f.users[id] = u
@@ -89,6 +89,16 @@ func (f *fakeUsers) Get(_ context.Context, id int64) (domain.User, error) {
 	if !ok {
 		return domain.User{}, storage.ErrNotFound
 	}
+	return u, nil
+}
+
+func (f *fakeUsers) SetStatus(_ context.Context, id int64, emoji, text string) (domain.User, error) {
+	u, ok := f.users[id]
+	if !ok {
+		return domain.User{}, storage.ErrNotFound
+	}
+	u.StatusEmoji, u.StatusText = emoji, text
+	f.users[id] = u
 	return u, nil
 }
 

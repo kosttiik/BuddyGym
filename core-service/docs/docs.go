@@ -376,7 +376,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Changes the profile theme. Status is derived from workouts and cannot be set.",
+                "description": "Changes the theme and the status line. Every field is optional; only the ones present are written. Empty strings clear the status. The rank is derived from workouts and cannot be set.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1238,7 +1238,15 @@ const docTemplate = `{
                     "description": "the telegram URL, unreachable for our users. Kept as the mirror change signal, not for display.",
                     "type": "string"
                 },
-                "status": {
+                "rank": {
+                    "description": "derived from the workout total, not settable",
+                    "type": "string"
+                },
+                "status_emoji": {
+                    "description": "what the member writes about themselves: a single emoji plus a short line",
+                    "type": "string"
+                },
+                "status_text": {
                     "type": "string"
                 },
                 "streak": {
@@ -1352,7 +1360,15 @@ const docTemplate = `{
                     "description": "the telegram URL, unreachable for our users. Kept as the mirror change signal, not for display.",
                     "type": "string"
                 },
-                "status": {
+                "rank": {
+                    "description": "derived from the workout total, not settable",
+                    "type": "string"
+                },
+                "status_emoji": {
+                    "description": "what the member writes about themselves: a single emoji plus a short line",
+                    "type": "string"
+                },
+                "status_text": {
                     "type": "string"
                 },
                 "theme": {
@@ -1506,6 +1522,13 @@ const docTemplate = `{
         "httpapi.UpdateMeRequest": {
             "type": "object",
             "properties": {
+                "status_emoji": {
+                    "type": "string"
+                },
+                "status_text": {
+                    "type": "string",
+                    "example": "На массе"
+                },
                 "theme": {
                     "type": "string",
                     "enum": [

@@ -71,7 +71,14 @@ definitions:
         description: the telegram URL, unreachable for our users. Kept as the mirror
           change signal, not for display.
         type: string
-      status:
+      rank:
+        description: derived from the workout total, not settable
+        type: string
+      status_emoji:
+        description: 'what the member writes about themselves: a single emoji plus
+          a short line'
+        type: string
+      status_text:
         type: string
       streak:
         type: integer
@@ -150,7 +157,14 @@ definitions:
         description: the telegram URL, unreachable for our users. Kept as the mirror
           change signal, not for display.
         type: string
-      status:
+      rank:
+        description: derived from the workout total, not settable
+        type: string
+      status_emoji:
+        description: 'what the member writes about themselves: a single emoji plus
+          a short line'
+        type: string
+      status_text:
         type: string
       theme:
         type: string
@@ -256,6 +270,11 @@ definitions:
     type: object
   httpapi.UpdateMeRequest:
     properties:
+      status_emoji:
+        type: string
+      status_text:
+        example: На массе
+        type: string
       theme:
         enum:
         - default
@@ -556,8 +575,9 @@ paths:
     patch:
       consumes:
       - application/json
-      description: Changes the profile theme. Status is derived from workouts and
-        cannot be set.
+      description: Changes the theme and the status line. Every field is optional;
+        only the ones present are written. Empty strings clear the status. The rank
+        is derived from workouts and cannot be set.
       parameters:
       - description: fields to update
         in: body

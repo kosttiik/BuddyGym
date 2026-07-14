@@ -18,7 +18,7 @@ import (
 
 type UsersRepo interface {
 	Grant(ctx context.Context, userID int64, keys []string) ([]string, error)
-	SetStatus(ctx context.Context, id int64, status string) error
+	SetRank(ctx context.Context, id int64, rank string) error
 }
 
 type RoomsRepo interface {
@@ -110,7 +110,7 @@ func (s *Server) reward(ctx context.Context, userID int64) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := s.users.SetStatus(ctx, userID, domain.StatusFor(total)); err != nil {
+	if err := s.users.SetRank(ctx, userID, domain.RankFor(total)); err != nil {
 		return granted, err
 	}
 	return granted, nil

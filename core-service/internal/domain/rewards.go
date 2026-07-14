@@ -10,10 +10,12 @@ const (
 	AchStreak7      = "streak_7"
 )
 
+// Ranks are derived from the workout total. The member cannot set them; what they can set
+// is the free-text status next to their name.
 const (
-	StatusNovice  = "novice"
-	StatusRegular = "regular"
-	StatusBeast   = "beast"
+	RankNovice  = "novice"
+	RankRegular = "regular"
+	RankBeast   = "beast"
 )
 
 // EarnedAchievements returns every achievement the totals qualify for.
@@ -38,14 +40,14 @@ func EarnedAchievements(totalWorkouts, streakDays int) []string {
 	return keys
 }
 
-func StatusFor(totalWorkouts int) string {
+func RankFor(totalWorkouts int) string {
 	switch {
 	case totalWorkouts >= 50:
-		return StatusBeast
+		return RankBeast
 	case totalWorkouts >= 10:
-		return StatusRegular
+		return RankRegular
 	default:
-		return StatusNovice
+		return RankNovice
 	}
 }
 

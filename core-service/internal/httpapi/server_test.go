@@ -283,10 +283,12 @@ func TestHealth(t *testing.T) {
 	}
 }
 
+func ptr[T any](v T) *T { return &v }
+
 func TestPatchMe(t *testing.T) {
 	e := newEnv()
 
-	rec := e.do(t, "PATCH", "/api/v1/me", httpapi.UpdateMeRequest{Theme: "dark"}, reqOpts{})
+	rec := e.do(t, "PATCH", "/api/v1/me", httpapi.UpdateMeRequest{Theme: ptr("dark")}, reqOpts{})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("patch: %d %s", rec.Code, rec.Body.String())
 	}
@@ -294,13 +296,53 @@ func TestPatchMe(t *testing.T) {
 		t.Errorf("theme = %q", u.Theme)
 	}
 
-	rec = e.do(t, "PATCH", "/api/v1/me", httpapi.UpdateMeRequest{Theme: "gold"}, reqOpts{})
+	rec = e.do(t, "PATCH", "/api/v1/me", httpapi.UpdateMeRequest{Theme: ptr("gold")}, reqOpts{})
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("unknown theme: %d", rec.Code)
 	}
 	rec = e.do(t, "PATCH", "/api/v1/me", "{bad json", reqOpts{})
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("bad json: %d", rec.Code)
+	}
+}
+
+func TestPatchMeStatus(t *testing.T) {
+	e := newEnv()
+
+	rec := e.do(t, "PATCH", "/api/v1/me", httpapi.UpdateMeRequest{
+		StatusEmoji: ptr("💪"), StatusText: ptr("  На массе  "),
+	}, reqOpts{})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("set status: %d %s", rec.Code, rec.Body.String())
+	}
+	u := decode[domain.User](t, rec)
+	if u.StatusEmoji != "💪" || u.StatusText != "На массе" {
+		t.Errorf("status = %q %q, want the trimmed line", u.StatusEmoji, u.StatusText)
+	}
+
+	// the theme is a separate field: touching the status must not wipe it
+	rec = e.do(t, "PATCH", "/api/v1/me", httpapi.UpdateMeRequest{Theme: ptr("dark")}, reqOpts{})
+	if u := decode[domain.User](t, rec); u.StatusText != "На массе" || u.Theme != "dark" {
+		t.Errorf("patching the theme dropped the status: %+v", u)
+	}
+
+	bad := []httpapi.UpdateMeRequest{
+		{StatusEmoji: ptr("💪🔥")},
+		{StatusEmoji: ptr("x")},
+		{StatusText: ptr(strings.Repeat("я", 61))},
+		{StatusText: ptr("две\nстроки")},
+	}
+	for i, req := range bad {
+		if rec := e.do(t, "PATCH", "/api/v1/me", req, reqOpts{}); rec.Code != http.StatusBadRequest {
+			t.Errorf("case %d: %d, want 400", i, rec.Code)
+		}
+	}
+
+	rec = e.do(t, "PATCH", "/api/v1/me", httpapi.UpdateMeRequest{
+		StatusEmoji: ptr(""), StatusText: ptr(""),
+	}, reqOpts{})
+	if u := decode[domain.User](t, rec); u.StatusEmoji != "" || u.StatusText != "" {
+		t.Errorf("status was not cleared: %+v", u)
 	}
 }
 

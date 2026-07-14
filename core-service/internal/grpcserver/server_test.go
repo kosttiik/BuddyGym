@@ -23,7 +23,7 @@ import (
 
 type fakeUsers struct {
 	granted map[int64][]string
-	status  map[int64]string
+	rank    map[int64]string
 }
 
 func (f *fakeUsers) Grant(_ context.Context, userID int64, keys []string) ([]string, error) {
@@ -37,8 +37,8 @@ func (f *fakeUsers) Grant(_ context.Context, userID int64, keys []string) ([]str
 	return fresh, nil
 }
 
-func (f *fakeUsers) SetStatus(_ context.Context, id int64, status string) error {
-	f.status[id] = status
+func (f *fakeUsers) SetRank(_ context.Context, id int64, rank string) error {
+	f.rank[id] = rank
 	return nil
 }
 
@@ -113,7 +113,7 @@ type env struct {
 func newEnv(t *testing.T) *env {
 	t.Helper()
 	e := &env{
-		users:   &fakeUsers{granted: map[int64][]string{}, status: map[int64]string{}},
+		users:   &fakeUsers{granted: map[int64][]string{}, rank: map[int64]string{}},
 		rooms:   &fakeRooms{rooms: map[int64]domain.Room{}, members: map[int64][]int64{}},
 		results: &fakeResults{seen: map[string]bool{}, counts: map[resultKey]int{}, days: map[int64][]time.Time{}},
 	}
@@ -172,8 +172,8 @@ func TestApplyCheckinResultApproved(t *testing.T) {
 	if !slices.Contains(resp.GrantedAchievements, domain.AchFirstCheckin) {
 		t.Errorf("granted = %v, want first_checkin", resp.GrantedAchievements)
 	}
-	if e.users.status[7] != domain.StatusNovice {
-		t.Errorf("status = %q", e.users.status[7])
+	if e.users.rank[7] != domain.RankNovice {
+		t.Errorf("rank = %q", e.users.rank[7])
 	}
 
 	// same checkin again: idempotent, nothing granted, counter unchanged
@@ -244,8 +244,8 @@ func TestApplyCheckinResultStatusUpgrade(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if e.users.status[9] != domain.StatusRegular {
-		t.Errorf("status after 10 workouts = %q, want regular", e.users.status[9])
+	if e.users.rank[9] != domain.RankRegular {
+		t.Errorf("rank after 10 workouts = %q, want regular", e.users.rank[9])
 	}
 	if !slices.Contains(e.users.granted[9], domain.AchWorkouts10) {
 		t.Errorf("granted = %v, want workouts_10", e.users.granted[9])
