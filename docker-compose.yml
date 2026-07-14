@@ -54,6 +54,7 @@ services:
       S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
       S3_AVATAR_BUCKET: ${S3_AVATAR_BUCKET:-avatars}
+      S3_COMMENT_BUCKET: ${S3_COMMENT_BUCKET:-comment-photos}
     depends_on:
       postgres:
         condition: service_healthy

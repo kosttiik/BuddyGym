@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strconv"
 	"time"
 )
 
@@ -19,6 +20,10 @@ type Fetcher interface {
 
 type Uploader interface {
 	Put(ctx context.Context, key string, data []byte) error
+}
+
+func Key(userID int64) string {
+	return "avatars/" + strconv.FormatInt(userID, 10)
 }
 
 type Mirror struct {

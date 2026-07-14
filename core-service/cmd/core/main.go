@@ -28,6 +28,7 @@ import (
 	"github.com/kosttiik/BuddyGym/core-service/internal/config"
 	"github.com/kosttiik/BuddyGym/core-service/internal/grpcserver"
 	"github.com/kosttiik/BuddyGym/core-service/internal/httpapi"
+	"github.com/kosttiik/BuddyGym/core-service/internal/objects"
 	"github.com/kosttiik/BuddyGym/core-service/internal/ratelimit"
 	roomreaper "github.com/kosttiik/BuddyGym/core-service/internal/rooms"
 	"github.com/kosttiik/BuddyGym/core-service/internal/storage"
@@ -79,7 +80,7 @@ func backfillAvatars(log *slog.Logger) error {
 	defer pool.Close()
 
 	users := storage.NewUsers(pool)
-	store, err := avatar.NewStore(ctx, avatar.StoreConfig(cfg.S3))
+	store, err := objects.NewStore(ctx, storeConfig(cfg.S3, cfg.S3.Bucket))
 	if err != nil {
 		return err
 	}
@@ -143,21 +144,29 @@ func run(log *slog.Logger) error {
 	checkinClient := checkin.NewClient(conn)
 	results := storage.NewResults(pool)
 	buddies := storage.NewBuddies(pool)
+	comments := storage.NewComments(pool)
 
 	// avatars are optional: without object storage the mini app falls back to initials.
 	// these stay interface-typed so a disabled mirror is a nil interface, not a typed nil.
 	var avatarStore httpapi.AvatarStore
 	var avatarMirror httpapi.AvatarMirror
+	var commentPhotos httpapi.ObjectStore
 	if cfg.S3.Enabled() {
-		store, err := avatar.NewStore(ctx, avatar.StoreConfig(cfg.S3))
+		store, err := objects.NewStore(ctx, storeConfig(cfg.S3, cfg.S3.Bucket))
 		if err != nil {
 			return err
 		}
 		avatarStore = store
 		avatarMirror = avatar.NewMirror(users, avatar.NewTelegram(cfg.BotToken, nil), store, log)
-		log.Info("avatar mirror ready", "bucket", cfg.S3.Bucket)
+
+		photos, err := objects.NewStore(ctx, storeConfig(cfg.S3, cfg.S3.CommentBucket))
+		if err != nil {
+			return err
+		}
+		commentPhotos = photos
+		log.Info("object storage ready", "avatars", cfg.S3.Bucket, "comments", cfg.S3.CommentBucket)
 	} else {
-		log.Warn("object storage not configured, avatars disabled")
+		log.Warn("object storage not configured, avatars and comment photos disabled")
 	}
 
 	api := httpapi.New(httpapi.Options{
@@ -165,6 +174,8 @@ func run(log *slog.Logger) error {
 		Rooms:          rooms,
 		Streaks:        results,
 		Buddies:        buddies,
+		Comments:       comments,
+		CommentPhotos:  commentPhotos,
 		Checkins:       checkinClient,
 		Avatars:        avatarStore,
 		AvatarMirror:   avatarMirror,
@@ -233,4 +244,14 @@ func run(log *slog.Logger) error {
 	defer cancel()
 	grpcSrv.GracefulStop()
 	return httpSrv.Shutdown(shutdownCtx)
+}
+
+func storeConfig(cfg config.S3Config, bucket string) objects.StoreConfig {
+	return objects.StoreConfig{
+		Endpoint:  cfg.Endpoint,
+		AccessKey: cfg.AccessKey,
+		SecretKey: cfg.SecretKey,
+		Bucket:    bucket,
+		UseSSL:    cfg.UseSSL,
+	}
 }

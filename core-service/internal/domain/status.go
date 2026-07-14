@@ -5,6 +5,8 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/google/uuid"
+
 	"github.com/rivo/uniseg"
 )
 
@@ -49,4 +51,28 @@ func NormalizeStatusEmoji(emoji string) (string, error) {
 		}
 	}
 	return emoji, nil
+}
+
+const MaxCommentLen = 500
+
+var (
+	ErrCommentEmpty   = errors.New("comment must not be empty")
+	ErrCommentTooLong = errors.New("comment must be at most 500 characters")
+)
+
+// NormalizeCommentBody allows an empty body when a photo carries the comment: a meme needs
+// no caption.
+func NormalizeCommentBody(body string, hasPhoto bool) (string, error) {
+	body = strings.TrimSpace(body)
+	if body == "" && !hasPhoto {
+		return "", ErrCommentEmpty
+	}
+	if uniseg.GraphemeClusterCount(body) > MaxCommentLen {
+		return "", ErrCommentTooLong
+	}
+	return body, nil
+}
+
+func CommentPhotoKey() string {
+	return "comments/" + uuid.NewString()
 }

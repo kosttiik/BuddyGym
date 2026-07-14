@@ -1,9 +1,10 @@
-package avatar
+// Package objects wraps the S3 bucket core keeps its own binaries in: mirrored avatars and
+// photos attached to comments.
+package objects
 
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 
@@ -36,7 +37,7 @@ func NewStore(ctx context.Context, cfg StoreConfig) (*Store, error) {
 	return s, s.ensureBucket(ctx)
 }
 
-// The bucket stays private: avatars are served through core, which checks the bearer token.
+// The bucket stays private: bytes are served through core, which checks the bearer token.
 func (s *Store) ensureBucket(ctx context.Context) error {
 	ok, err := s.client.BucketExists(ctx, s.bucket)
 	if err != nil {
@@ -48,10 +49,6 @@ func (s *Store) ensureBucket(ctx context.Context) error {
 	return s.client.MakeBucket(ctx, s.bucket, minio.MakeBucketOptions{})
 }
 
-func Key(userID int64) string {
-	return fmt.Sprintf("avatars/%d", userID)
-}
-
 func (s *Store) Put(ctx context.Context, key string, data []byte) error {
 	contentType := http.DetectContentType(data)
 	_, err := s.client.PutObject(ctx, s.bucket, key, bytes.NewReader(data), int64(len(data)),
@@ -59,7 +56,7 @@ func (s *Store) Put(ctx context.Context, key string, data []byte) error {
 	return err
 }
 
-// Open streams an avatar back. The caller closes the reader.
+// Open streams an object back. The caller closes the reader.
 func (s *Store) Open(ctx context.Context, key string) (io.ReadCloser, string, error) {
 	obj, err := s.client.GetObject(ctx, s.bucket, key, minio.GetObjectOptions{})
 	if err != nil {
@@ -72,4 +69,8 @@ func (s *Store) Open(ctx context.Context, key string) (io.ReadCloser, string, er
 		return nil, "", err
 	}
 	return obj, info.ContentType, nil
+}
+
+func (s *Store) Delete(ctx context.Context, key string) error {
+	return s.client.RemoveObject(ctx, s.bucket, key, minio.RemoveObjectOptions{})
 }

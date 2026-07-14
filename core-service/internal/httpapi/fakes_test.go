@@ -170,14 +170,150 @@ func (f *fakeBuddies) ForCheckins(_ context.Context, checkinIDs []string) (map[s
 	return out, nil
 }
 
+type fakeComments struct {
+	byCheckin map[string][]domain.Comment
+	likes     map[int64]map[int64]bool
+	users     *fakeUsers
+	rooms     *fakeRooms
+	nextID    int64
+}
+
+func newFakeComments(users *fakeUsers, rooms *fakeRooms) *fakeComments {
+	return &fakeComments{
+		byCheckin: map[string][]domain.Comment{},
+		likes:     map[int64]map[int64]bool{},
+		users:     users,
+		rooms:     rooms,
+	}
+}
+
+func (f *fakeComments) view(c domain.Comment, viewerID int64) domain.Comment {
+	c.Likes = len(f.likes[c.ID])
+	c.LikedByMe = f.likes[c.ID][viewerID]
+	c.HasPhoto = c.PhotoKey != ""
+	return c
+}
+
+func (f *fakeComments) Add(_ context.Context, checkinID string, roomID, userID int64, body, photoKey string) (domain.Comment, error) {
+	f.nextID++
+	c := domain.Comment{
+		ID: f.nextID, CheckinID: checkinID, UserID: userID,
+		Author: f.users.users[userID], Body: body, PhotoKey: photoKey, CreatedAt: time.Now(),
+	}
+	f.byCheckin[checkinID] = append(f.byCheckin[checkinID], c)
+	f.rooms.commentRoom[c.ID] = roomID
+	return f.view(c, userID), nil
+}
+
+func (f *fakeComments) Get(_ context.Context, id, viewerID int64) (domain.Comment, error) {
+	for _, list := range f.byCheckin {
+		for _, c := range list {
+			if c.ID == id {
+				return f.view(c, viewerID), nil
+			}
+		}
+	}
+	return domain.Comment{}, storage.ErrNotFound
+}
+
+func (f *fakeComments) List(_ context.Context, checkinID string, viewerID int64, limit, offset int) ([]domain.Comment, error) {
+	all := f.byCheckin[checkinID]
+	if offset >= len(all) {
+		return nil, nil
+	}
+	out := make([]domain.Comment, 0, limit)
+	for _, c := range all[offset:min(offset+limit, len(all))] {
+		out = append(out, f.view(c, viewerID))
+	}
+	return out, nil
+}
+
+func (f *fakeComments) Delete(_ context.Context, id, userID int64) (string, error) {
+	for checkinID, list := range f.byCheckin {
+		for i, c := range list {
+			if c.ID != id {
+				continue
+			}
+			creator := f.rooms.rooms[f.rooms.commentRoom[id]].CreatorID
+			if c.UserID != userID && creator != userID {
+				return "", storage.ErrNotFound
+			}
+			f.byCheckin[checkinID] = append(list[:i], list[i+1:]...)
+			return c.PhotoKey, nil
+		}
+	}
+	return "", storage.ErrNotFound
+}
+
+func (f *fakeComments) Like(_ context.Context, commentID, userID int64) error {
+	if f.likes[commentID] == nil {
+		f.likes[commentID] = map[int64]bool{}
+	}
+	f.likes[commentID][userID] = true
+	return nil
+}
+
+func (f *fakeComments) Unlike(_ context.Context, commentID, userID int64) error {
+	delete(f.likes[commentID], userID)
+	return nil
+}
+
+func (f *fakeComments) Summaries(_ context.Context, checkinIDs []string, viewerID int64) (map[string]domain.CommentSummary, error) {
+	out := map[string]domain.CommentSummary{}
+	for _, id := range checkinIDs {
+		list := f.byCheckin[id]
+		summary := domain.CommentSummary{Count: len(list)}
+		for _, c := range list {
+			viewed := f.view(c, viewerID)
+			if summary.Top == nil || viewed.Likes > summary.Top.Likes {
+				top := viewed
+				summary.Top = &top
+			}
+		}
+		out[id] = summary
+	}
+	return out, nil
+}
+
+type fakeObjects struct {
+	objects map[string][]byte
+}
+
+func newFakeObjects() *fakeObjects {
+	return &fakeObjects{objects: map[string][]byte{}}
+}
+
+func (f *fakeObjects) Put(_ context.Context, key string, data []byte) error {
+	f.objects[key] = data
+	return nil
+}
+
+func (f *fakeObjects) Open(_ context.Context, key string) (io.ReadCloser, string, error) {
+	data, ok := f.objects[key]
+	if !ok {
+		return nil, "", storage.ErrNotFound
+	}
+	return io.NopCloser(bytes.NewReader(data)), "image/png", nil
+}
+
+func (f *fakeObjects) Delete(_ context.Context, key string) error {
+	delete(f.objects, key)
+	return nil
+}
+
 type fakeRooms struct {
-	rooms   map[int64]domain.Room
-	members map[int64]map[int64]time.Time
-	nextID  int64
+	rooms       map[int64]domain.Room
+	members     map[int64]map[int64]time.Time
+	commentRoom map[int64]int64
+	nextID      int64
 }
 
 func newFakeRooms() *fakeRooms {
-	return &fakeRooms{rooms: map[int64]domain.Room{}, members: map[int64]map[int64]time.Time{}}
+	return &fakeRooms{
+		rooms:       map[int64]domain.Room{},
+		members:     map[int64]map[int64]time.Time{},
+		commentRoom: map[int64]int64{},
+	}
 }
 
 func (f *fakeRooms) Create(_ context.Context, room domain.Room) (domain.Room, error) {

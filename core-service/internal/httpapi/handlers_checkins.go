@@ -324,7 +324,7 @@ func (s *Server) handleListCheckins(w http.ResponseWriter, r *http.Request) {
 	if list == nil {
 		list = []checkin.Checkin{}
 	}
-	writeJSON(w, http.StatusOK, s.enrichBuddies(r, list))
+	writeJSON(w, http.StatusOK, s.enrichComments(r, s.enrichBuddies(r, list)))
 }
 
 // handleVote godoc

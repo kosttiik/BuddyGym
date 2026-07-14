@@ -3,11 +3,12 @@ definitions:
   checkin.Checkin:
     properties:
       buddies:
-        description: people the author tagged as training with them; filled in by
-          core, not checkin-service
+        description: filled in by core, not checkin-service
         items:
           $ref: '#/definitions/domain.User'
         type: array
+      comments_count:
+        type: integer
       created_at:
         type: string
       expires_at:
@@ -34,6 +35,8 @@ definitions:
         - rejected
         - expired
         type: string
+      top_comment:
+        $ref: '#/definitions/domain.Comment'
       user_id:
         type: integer
       votes_approve:
@@ -56,6 +59,29 @@ definitions:
         type: string
       key:
         type: string
+    type: object
+  domain.Comment:
+    properties:
+      author:
+        $ref: '#/definitions/domain.User'
+      body:
+        type: string
+      checkin_id:
+        type: string
+      created_at:
+        type: string
+      has_photo:
+        description: bytes come from GET /checkins/{id}/comments/{commentId}/photo,
+          the bucket is private
+        type: boolean
+      id:
+        type: integer
+      liked_by_me:
+        type: boolean
+      likes:
+        type: integer
+      user_id:
+        type: integer
     type: object
   domain.Member:
     properties:
@@ -196,6 +222,12 @@ definitions:
         items:
           type: integer
         type: array
+    type: object
+  httpapi.CommentRequest:
+    properties:
+      body:
+        example: Красавчик
+        type: string
     type: object
   httpapi.CreateCheckinGeoRequest:
     properties:
@@ -559,6 +591,250 @@ paths:
       security:
       - BearerAuth: []
       summary: Remove a tagged buddy
+      tags:
+      - checkins
+  /checkins/{id}/comments:
+    get:
+      parameters:
+      - description: checkin id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: page size, default 50, max 100
+        in: query
+        name: limit
+        type: integer
+      - description: page offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/domain.Comment'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List comments on a checkin
+      tags:
+      - checkins
+    post:
+      consumes:
+      - application/json
+      - multipart/form-data
+      description: Room members only. Send JSON with a body, or multipart/form-data
+        with a "body" field and an optional "photo" file up to 5 MB. Either the text
+        or the photo must be there.
+      parameters:
+      - description: checkin id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: comment (json variant)
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/httpapi.CommentRequest'
+      - description: attached image
+        in: formData
+        name: photo
+        type: file
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/domain.Comment'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Comment on a checkin
+      tags:
+      - checkins
+  /checkins/{id}/comments/{commentId}:
+    delete:
+      description: The author can delete their own comment; the room creator can delete
+        any.
+      parameters:
+      - description: checkin id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: comment id
+        in: path
+        name: commentId
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a comment
+      tags:
+      - checkins
+  /checkins/{id}/comments/{commentId}/like:
+    delete:
+      parameters:
+      - description: checkin id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: comment id
+        in: path
+        name: commentId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.Comment'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Remove a like from a comment
+      tags:
+      - checkins
+    post:
+      description: 'Idempotent: liking twice leaves one like.'
+      parameters:
+      - description: checkin id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: comment id
+        in: path
+        name: commentId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.Comment'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Like a comment
+      tags:
+      - checkins
+  /checkins/{id}/comments/{commentId}/photo:
+    get:
+      description: Room members only. The bucket is private and the bytes are proxied
+        by core, so browsers must fetch this with XHR rather than a plain <img src>.
+      parameters:
+      - description: checkin id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: comment id
+        in: path
+        name: commentId
+        required: true
+        type: integer
+      produces:
+      - image/jpeg
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Download a photo attached to a comment
       tags:
       - checkins
   /checkins/{id}/photo:
