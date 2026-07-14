@@ -2,6 +2,12 @@ basePath: /api/v1
 definitions:
   checkin.Checkin:
     properties:
+      buddies:
+        description: people the author tagged as training with them; filled in by
+          core, not checkin-service
+        items:
+          $ref: '#/definitions/domain.User'
+        type: array
       created_at:
         type: string
       expires_at:
@@ -184,8 +190,19 @@ definitions:
       user:
         $ref: '#/definitions/domain.User'
     type: object
+  httpapi.BuddiesRequest:
+    properties:
+      user_ids:
+        items:
+          type: integer
+        type: array
+    type: object
   httpapi.CreateCheckinGeoRequest:
     properties:
+      buddy_ids:
+        items:
+          type: integer
+        type: array
       geo:
         $ref: '#/definitions/checkin.Geo'
       room_ids:
@@ -394,6 +411,13 @@ paths:
           type: integer
         name: room_ids
         type: array
+      - collectionFormat: csv
+        description: members who trained with you
+        in: formData
+        items:
+          type: integer
+        name: buddy_ids
+        type: array
       - description: geo proof (json variant)
         in: body
         name: body
@@ -435,6 +459,106 @@ paths:
       security:
       - BearerAuth: []
       summary: Create a checkin in one or more rooms
+      tags:
+      - checkins
+  /checkins/{id}/buddies:
+    post:
+      consumes:
+      - application/json
+      description: Adds buddies to a checkin that is still being voted on. Only the
+        author can tag, and buddies who are not members of the checkin room are ignored.
+        The workout is credited to them once the room approves the checkin, so a rejected
+        photo hands out nothing.
+      parameters:
+      - description: checkin id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: tagged user ids
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/httpapi.BuddiesRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/domain.User'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Tag people who trained with you
+      tags:
+      - checkins
+  /checkins/{id}/buddies/{userId}:
+    delete:
+      description: 'Untags a buddy from a checkin. Only the author can untag, and
+        only while the checkin is still pending: once it is approved the workout is
+        already theirs.'
+      parameters:
+      - description: checkin id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: tagged user id
+        in: path
+        name: userId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/domain.User'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Remove a tagged buddy
       tags:
       - checkins
   /checkins/{id}/photo:

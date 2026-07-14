@@ -9,6 +9,8 @@ import (
 	"google.golang.org/grpc"
 
 	pbv1 "github.com/kosttiik/BuddyGym/core-service/internal/pb/buddygym/v1"
+
+	"github.com/kosttiik/BuddyGym/core-service/internal/domain"
 )
 
 type Geo struct {
@@ -33,7 +35,9 @@ type Checkin struct {
 	PhotoPurged    bool       `json:"photo_purged"`
 	PhotoExpiresAt *time.Time `json:"photo_expires_at,omitempty"`
 	Geo            *Geo       `json:"geo,omitempty"`
-	VotesApprove   int32      `json:"votes_approve"`
+	// people the author tagged as training with them; filled in by core, not checkin-service
+	Buddies        []domain.User `json:"buddies,omitempty"`
+	VotesApprove   int32         `json:"votes_approve"`
 	VotesReject    int32      `json:"votes_reject"`
 	VotesRequired  int32      `json:"votes_required"`
 	CreatedAt      time.Time  `json:"created_at"`

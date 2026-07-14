@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"slices"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -130,6 +131,43 @@ func (f *fakeAvatars) Open(_ context.Context, key string) (io.ReadCloser, string
 		return nil, "", storage.ErrNotFound
 	}
 	return io.NopCloser(bytes.NewReader(data)), "image/jpeg", nil
+}
+
+type fakeBuddies struct {
+	tagged map[string][]int64
+	users  *fakeUsers
+}
+
+func newFakeBuddies(users *fakeUsers) *fakeBuddies {
+	return &fakeBuddies{tagged: map[string][]int64{}, users: users}
+}
+
+func (f *fakeBuddies) Tag(_ context.Context, checkinID string, _, _ int64, userIDs []int64) error {
+	for _, id := range userIDs {
+		if !slices.Contains(f.tagged[checkinID], id) {
+			f.tagged[checkinID] = append(f.tagged[checkinID], id)
+		}
+	}
+	return nil
+}
+
+func (f *fakeBuddies) Untag(_ context.Context, checkinID string, userID int64) error {
+	kept := slices.DeleteFunc(slices.Clone(f.tagged[checkinID]), func(id int64) bool { return id == userID })
+	if len(kept) == len(f.tagged[checkinID]) {
+		return storage.ErrNotFound
+	}
+	f.tagged[checkinID] = kept
+	return nil
+}
+
+func (f *fakeBuddies) ForCheckins(_ context.Context, checkinIDs []string) (map[string][]domain.User, error) {
+	out := map[string][]domain.User{}
+	for _, cid := range checkinIDs {
+		for _, id := range f.tagged[cid] {
+			out[cid] = append(out[cid], f.users.users[id])
+		}
+	}
+	return out, nil
 }
 
 type fakeRooms struct {

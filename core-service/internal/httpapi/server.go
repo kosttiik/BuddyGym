@@ -45,6 +45,12 @@ type AvatarMirror interface {
 	SyncInBackground(userID int64, photoURL, mirroredFrom string)
 }
 
+type BuddiesRepo interface {
+	Tag(ctx context.Context, checkinID string, roomID, authorID int64, userIDs []int64) error
+	Untag(ctx context.Context, checkinID string, userID int64) error
+	ForCheckins(ctx context.Context, checkinIDs []string) (map[string][]domain.User, error)
+}
+
 type StreaksRepo interface {
 	StreaksByRoom(ctx context.Context, roomID int64) ([]domain.StreakInput, error)
 	StreaksByUser(ctx context.Context, userID int64) ([]domain.StreakInput, error)
@@ -68,6 +74,7 @@ type Server struct {
 	users        UsersRepo
 	rooms        RoomsRepo
 	streaks      StreaksRepo
+	buddies      BuddiesRepo
 	checkins     CheckinClient
 	avatars      AvatarStore
 	avatarMirror AvatarMirror
@@ -90,6 +97,7 @@ type Options struct {
 	Users          UsersRepo
 	Rooms          RoomsRepo
 	Streaks        StreaksRepo
+	Buddies        BuddiesRepo
 	Checkins       CheckinClient
 	Avatars        AvatarStore
 	AvatarMirror   AvatarMirror
@@ -117,6 +125,7 @@ func New(opts Options) *Server {
 		users:          opts.Users,
 		rooms:          opts.Rooms,
 		streaks:        opts.Streaks,
+		buddies:        opts.Buddies,
 		checkins:       opts.Checkins,
 		avatars:        opts.Avatars,
 		avatarMirror:   opts.AvatarMirror,
@@ -160,6 +169,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/rooms/{id}/checkins", s.withAuth(s.handleListCheckins))
 	mux.HandleFunc("GET /api/v1/checkins/{id}/photo", s.withAuth(s.handleGetCheckinPhoto))
 	mux.HandleFunc("POST /api/v1/checkins/{id}/vote", s.withAuth(s.handleVote))
+	mux.HandleFunc("POST /api/v1/checkins/{id}/buddies", s.withAuth(s.handleAddBuddies))
+	mux.HandleFunc("DELETE /api/v1/checkins/{id}/buddies/{userId}", s.withAuth(s.handleRemoveBuddy))
 
 	return s.withLogging(mux)
 }

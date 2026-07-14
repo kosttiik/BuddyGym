@@ -45,8 +45,9 @@ func isImage(b []byte) bool {
 }
 
 type CreateCheckinGeoRequest struct {
-	RoomIDs []int64     `json:"room_ids"`
-	Geo     checkin.Geo `json:"geo"`
+	RoomIDs  []int64     `json:"room_ids"`
+	BuddyIDs []int64     `json:"buddy_ids"`
+	Geo      checkin.Geo `json:"geo"`
 }
 
 type VoteRequest struct {
@@ -64,6 +65,7 @@ type VoteRequest struct {
 //	@Produce		json
 //	@Param			photo		formData	file					false	"workout photo"
 //	@Param			room_ids	formData	[]int					false	"rooms to submit to"
+//	@Param			buddy_ids	formData	[]int					false	"members who trained with you"
 //	@Param			body		body		CreateCheckinGeoRequest	false	"geo proof (json variant)"
 //	@Success		201			{array}		checkin.Checkin
 //	@Failure		400			{object}	ErrorResponse
@@ -82,6 +84,7 @@ func (s *Server) handleCreateCheckin(w http.ResponseWriter, r *http.Request) {
 	var photo []byte
 	var geo *checkin.Geo
 	var roomIDs []int64
+	var buddyIDs []int64
 
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
 		r.Body = http.MaxBytesReader(w, r.Body, maxPhotoSize+1<<20)
@@ -104,7 +107,12 @@ func (s *Server) handleCreateCheckin(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusBadRequest, "photo must be JPEG, PNG, GIF, WebP or HEIC")
 			return
 		}
-		roomIDs, err = parseRoomIDs(r.MultipartForm.Value["room_ids"])
+		roomIDs, err = parseIDs(r.MultipartForm.Value["room_ids"], "room_ids")
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		buddyIDs, err = parseIDs(r.MultipartForm.Value["buddy_ids"], "buddy_ids")
 		if err != nil {
 			writeErr(w, http.StatusBadRequest, err.Error())
 			return
@@ -121,6 +129,7 @@ func (s *Server) handleCreateCheckin(w http.ResponseWriter, r *http.Request) {
 		}
 		geo = &req.Geo
 		roomIDs = req.RoomIDs
+		buddyIDs = req.BuddyIDs
 	}
 
 	targets, ok := s.resolveTargets(w, r, roomIDs)
@@ -133,7 +142,18 @@ func (s *Server) handleCreateCheckin(w http.ResponseWriter, r *http.Request) {
 		s.mapError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, created)
+
+	for _, c := range created {
+		buddies, ok := s.resolveBuddies(w, r, c.RoomID, buddyIDs)
+		if !ok {
+			return
+		}
+		if err := s.buddies.Tag(r.Context(), c.ID, c.RoomID, user.ID, buddies); err != nil {
+			s.internal(w, err)
+			return
+		}
+	}
+	writeJSON(w, http.StatusCreated, s.enrichBuddies(r, created))
 }
 
 // resolveTargets rejects the whole request unless the caller is a member of every
@@ -177,7 +197,7 @@ func (s *Server) resolveTargets(w http.ResponseWriter, r *http.Request, roomIDs 
 	return targets, true
 }
 
-func parseRoomIDs(values []string) ([]int64, error) {
+func parseIDs(values []string, field string) ([]int64, error) {
 	ids := make([]int64, 0, len(values))
 	for _, raw := range values {
 		for _, part := range strings.Split(raw, ",") {
@@ -187,7 +207,7 @@ func parseRoomIDs(values []string) ([]int64, error) {
 			}
 			id, err := strconv.ParseInt(part, 10, 64)
 			if err != nil || id <= 0 {
-				return nil, errors.New("room_ids must be positive integers")
+				return nil, errors.New(field + " must be positive integers")
 			}
 			ids = append(ids, id)
 		}
@@ -304,7 +324,7 @@ func (s *Server) handleListCheckins(w http.ResponseWriter, r *http.Request) {
 	if list == nil {
 		list = []checkin.Checkin{}
 	}
-	writeJSON(w, http.StatusOK, list)
+	writeJSON(w, http.StatusOK, s.enrichBuddies(r, list))
 }
 
 // handleVote godoc
