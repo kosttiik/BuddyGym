@@ -86,6 +86,53 @@ func mustRoom(t *testing.T, creatorID int64) domain.Room {
 	return room
 }
 
+// The mirror runs on login. The backfill picks up everyone it has not seen: users who never
+// logged in since the feature shipped, and users who changed their picture.
+func TestUsersPendingAvatars(t *testing.T) {
+	ctx := context.Background()
+	users := storage.NewUsers(pool(t))
+
+	if _, err := users.Upsert(ctx, 301, "a", "NoPhoto", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := users.Upsert(ctx, 302, "b", "NeverMirrored", "https://t.me/pic/302"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := users.Upsert(ctx, 303, "c", "Mirrored", "https://t.me/pic/303"); err != nil {
+		t.Fatal(err)
+	}
+	if err := users.SetAvatar(ctx, 303, "avatars/303", "https://t.me/pic/303"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := users.Upsert(ctx, 304, "d", "ChangedPicture", "https://t.me/pic/304-new"); err != nil {
+		t.Fatal(err)
+	}
+	if err := users.SetAvatar(ctx, 304, "avatars/304", "https://t.me/pic/304-old"); err != nil {
+		t.Fatal(err)
+	}
+
+	pending, err := users.PendingAvatars(ctx)
+	if err != nil {
+		t.Fatalf("PendingAvatars: %v", err)
+	}
+	got := map[int64]string{}
+	for _, u := range pending {
+		got[u.ID] = u.PhotoURL
+	}
+	if _, ok := got[301]; ok {
+		t.Error("user without a telegram photo must not be queued")
+	}
+	if _, ok := got[303]; ok {
+		t.Error("already mirrored user must not be queued again")
+	}
+	if got[302] != "https://t.me/pic/302" {
+		t.Errorf("never mirrored user missing: %v", got)
+	}
+	if got[304] != "https://t.me/pic/304-new" {
+		t.Errorf("changed picture must be re-queued: %v", got)
+	}
+}
+
 func TestUsersUpsertGet(t *testing.T) {
 	ctx := context.Background()
 	users := storage.NewUsers(pool(t))

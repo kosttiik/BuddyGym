@@ -52,6 +52,29 @@ func (r *Users) UpdateTheme(ctx context.Context, id int64, theme string) (domain
 		"UPDATE users SET theme = $2 WHERE id = $1 RETURNING "+userColumns, id, theme))
 }
 
+// PendingAvatars lists users whose telegram picture has not been mirrored yet.
+// Their id and photo_url is all the mirror needs.
+func (r *Users) PendingAvatars(ctx context.Context) ([]domain.User, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, photo_url, avatar_source FROM users
+		WHERE photo_url <> '' AND photo_url IS DISTINCT FROM avatar_source
+		ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []domain.User
+	for rows.Next() {
+		var u domain.User
+		if err := rows.Scan(&u.ID, &u.PhotoURL, &u.AvatarSource); err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
 func (r *Users) SetAvatar(ctx context.Context, id int64, key, source string) error {
 	_, err := r.pool.Exec(ctx,
 		"UPDATE users SET avatar_key = $2, avatar_source = $3 WHERE id = $1", id, key, source)

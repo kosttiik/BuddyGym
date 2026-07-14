@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"log/slog"
 	"net"
 	"net/http"
@@ -43,12 +44,65 @@ import (
 //	@description				JWT from POST /auth/telegram: "Bearer <token>"
 
 func main() {
+	// one-shot: the mirror normally runs on login, this walks the users who never logged in since
+	backfill := flag.Bool("backfill-avatars", false, "mirror every avatar not mirrored yet, then exit")
+	flag.Parse()
+
 	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(log)
-	if err := run(log); err != nil {
+
+	start := run
+	if *backfill {
+		start = backfillAvatars
+	}
+	if err := start(log); err != nil {
 		log.Error("fatal", "err", err)
 		os.Exit(1)
 	}
+}
+
+func backfillAvatars(log *slog.Logger) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
+	if !cfg.S3.Enabled() {
+		return errors.New("object storage is not configured")
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	pool, err := storage.Connect(ctx, cfg.DBDSN)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+
+	users := storage.NewUsers(pool)
+	store, err := avatar.NewStore(ctx, avatar.StoreConfig(cfg.S3))
+	if err != nil {
+		return err
+	}
+	mirror := avatar.NewMirror(users, avatar.NewTelegram(cfg.BotToken, nil), store, log)
+
+	pending, err := users.PendingAvatars(ctx)
+	if err != nil {
+		return err
+	}
+	log.Info("backfilling avatars", "users", len(pending))
+
+	var done, failed int
+	for _, u := range pending {
+		// one bad user must not abort the run: log it and keep going
+		if err := mirror.Sync(ctx, u.ID, u.PhotoURL, u.AvatarSource); err != nil {
+			log.Error("mirror avatar", "err", err, "user_id", u.ID)
+			failed++
+			continue
+		}
+		done++
+	}
+	log.Info("backfill done", "mirrored", done, "failed", failed)
+	return nil
 }
 
 func run(log *slog.Logger) error {
