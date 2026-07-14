@@ -22,8 +22,9 @@ import (
 )
 
 type fakeUsers struct {
-	granted map[int64][]string
-	rank    map[int64]string
+	granted  map[int64][]string
+	rank     map[int64]string
+	workouts map[int64]int
 }
 
 func (f *fakeUsers) Grant(_ context.Context, userID int64, keys []string) ([]string, error) {
@@ -35,6 +36,10 @@ func (f *fakeUsers) Grant(_ context.Context, userID int64, keys []string) ([]str
 		}
 	}
 	return fresh, nil
+}
+
+func (f *fakeUsers) Stats(_ context.Context, userID int64) (domain.Stats, error) {
+	return domain.Stats{TotalWorkouts: f.workouts[userID]}, nil
 }
 
 func (f *fakeUsers) SetRank(_ context.Context, id int64, rank string) error {
@@ -64,8 +69,9 @@ type resultKey struct {
 }
 
 type fakeResults struct {
-	seen   map[string]bool
-	counts map[resultKey]int
+	users   *fakeUsers
+	seen    map[string]bool
+	counts  map[resultKey]int
 	days    map[int64][]time.Time
 	applied []time.Time
 }
@@ -77,6 +83,7 @@ func (f *fakeResults) Apply(_ context.Context, checkinID string, roomID, userID 
 	f.seen[checkinID] = true
 	if st == storage.ResultApproved {
 		f.counts[resultKey{roomID, userID}]++
+		f.users.workouts[userID]++
 		f.days[userID] = append([]time.Time{createdAt}, f.days[userID]...)
 		f.applied = append(f.applied, createdAt)
 	}
@@ -122,11 +129,12 @@ type env struct {
 func newEnv(t *testing.T) *env {
 	t.Helper()
 	e := &env{
-		users:   &fakeUsers{granted: map[int64][]string{}, rank: map[int64]string{}},
+		users:   &fakeUsers{granted: map[int64][]string{}, rank: map[int64]string{}, workouts: map[int64]int{}},
 		rooms:   &fakeRooms{rooms: map[int64]domain.Room{}, members: map[int64][]int64{}},
 		results: &fakeResults{seen: map[string]bool{}, counts: map[resultKey]int{}, days: map[int64][]time.Time{}},
 		buddies: &fakeBuddies{tagged: map[string][]int64{}},
 	}
+	e.results.users = e.users
 	lis := bufconn.Listen(1 << 20)
 	srv := grpc.NewServer()
 	pbv1.RegisterCoreInternalServiceServer(srv, grpcserver.New(e.users, e.rooms, e.results, e.buddies, nil))

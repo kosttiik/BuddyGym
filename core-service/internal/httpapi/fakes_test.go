@@ -69,10 +69,15 @@ func (f *fakeStreaks) StreaksByUser(_ context.Context, userID int64) ([]domain.S
 type fakeUsers struct {
 	users map[int64]domain.User
 	achs  map[int64][]domain.Achievement
+	stats map[int64]domain.Stats
 }
 
 func newFakeUsers() *fakeUsers {
-	return &fakeUsers{users: map[int64]domain.User{}, achs: map[int64][]domain.Achievement{}}
+	return &fakeUsers{
+		users: map[int64]domain.User{},
+		achs:  map[int64][]domain.Achievement{},
+		stats: map[int64]domain.Stats{},
+	}
 }
 
 func (f *fakeUsers) Upsert(_ context.Context, id int64, username, firstName, photoURL string) (domain.User, error) {
@@ -115,6 +120,10 @@ func (f *fakeUsers) UpdateTheme(_ context.Context, id int64, theme string) (doma
 
 func (f *fakeUsers) Achievements(_ context.Context, userID int64) ([]domain.Achievement, error) {
 	return f.achs[userID], nil
+}
+
+func (f *fakeUsers) Stats(_ context.Context, userID int64) (domain.Stats, error) {
+	return f.stats[userID], nil
 }
 
 type fakeAvatars struct {

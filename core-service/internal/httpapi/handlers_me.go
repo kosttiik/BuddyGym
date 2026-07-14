@@ -11,8 +11,10 @@ import (
 var allowedThemes = []string{"default", "dark", "neon"}
 
 type MeResponse struct {
-	User         domain.User          `json:"user"`
-	Achievements []domain.Achievement `json:"achievements"`
+	User domain.User `json:"user"`
+	// the whole catalog, earned or not: a locked one carries its progress
+	Achievements []domain.AchievementProgress `json:"achievements"`
+	Stats        domain.Stats                 `json:"stats"`
 	// highest streak across the user rooms
 	BestStreak int `json:"best_streak"`
 }
@@ -37,24 +39,36 @@ type UpdateMeRequest struct {
 //	@Router			/me [get]
 func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 	user := userFrom(r.Context())
-	achs, err := s.users.Achievements(r.Context(), user.ID)
-	if err != nil {
-		s.internal(w, err)
-		return
-	}
-	if achs == nil {
-		achs = []domain.Achievement{}
-	}
-	streaks, err := s.streaks.StreaksByUser(r.Context(), user.ID)
+	progress, stats, err := s.profile(r, user.ID)
 	if err != nil {
 		s.internal(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, MeResponse{
 		User:         user,
-		Achievements: achs,
-		BestStreak:   domain.BestStreak(streaks, s.now()),
+		Achievements: progress,
+		Stats:        stats,
+		BestStreak:   stats.BestStreak,
 	})
+}
+
+// profile gathers the achievement catalog folded against the user stats.
+func (s *Server) profile(r *http.Request, userID int64) ([]domain.AchievementProgress, domain.Stats, error) {
+	stats, err := s.users.Stats(r.Context(), userID)
+	if err != nil {
+		return nil, domain.Stats{}, err
+	}
+	streaks, err := s.streaks.StreaksByUser(r.Context(), userID)
+	if err != nil {
+		return nil, domain.Stats{}, err
+	}
+	stats.BestStreak = domain.BestStreak(streaks, s.now())
+
+	granted, err := s.users.Achievements(r.Context(), userID)
+	if err != nil {
+		return nil, domain.Stats{}, err
+	}
+	return domain.Progress(stats, granted), stats, nil
 }
 
 // handlePatchMe godoc

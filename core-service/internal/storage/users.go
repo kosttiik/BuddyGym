@@ -127,3 +127,27 @@ func prefixed(alias, columns string) string {
 	}
 	return strings.Join(parts, ", ")
 }
+
+// Stats gathers every metric the achievement catalog measures against, in one round trip.
+// Early and late workouts are bucketed in UTC: the app has no per-user timezone yet.
+func (r *Users) Stats(ctx context.Context, userID int64) (domain.Stats, error) {
+	var s domain.Stats
+	err := r.pool.QueryRow(ctx, `
+		SELECT
+			(SELECT count(*)::int FROM checkin_results
+			  WHERE user_id = $1 AND status = 'approved'),
+			(SELECT count(*)::int FROM memberships m
+			  JOIN rooms rm ON rm.id = m.room_id
+			  WHERE m.user_id = $1 AND rm.deleted_at IS NULL),
+			(SELECT count(DISTINCT user_id)::int FROM checkin_buddies WHERE author_id = $1),
+			(SELECT count(*)::int FROM checkin_comments WHERE user_id = $1),
+			(SELECT count(*)::int FROM checkin_results
+			  WHERE user_id = $1 AND status = 'approved'
+			    AND extract(hour FROM checkin_created_at AT TIME ZONE 'UTC') < 8),
+			(SELECT count(*)::int FROM checkin_results
+			  WHERE user_id = $1 AND status = 'approved'
+			    AND extract(hour FROM checkin_created_at AT TIME ZONE 'UTC') >= 22)`,
+		userID).Scan(&s.TotalWorkouts, &s.Rooms, &s.Buddies, &s.Comments,
+		&s.EarlyWorkouts, &s.LateWorkouts)
+	return s, err
+}

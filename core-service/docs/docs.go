@@ -1744,14 +1744,20 @@ const docTemplate = `{
                 }
             }
         },
-        "domain.Achievement": {
+        "domain.AchievementProgress": {
             "type": "object",
             "properties": {
+                "current": {
+                    "type": "integer"
+                },
                 "granted_at": {
                     "type": "string"
                 },
                 "key": {
                     "type": "string"
+                },
+                "target": {
+                    "type": "integer"
                 }
             }
         },
@@ -1912,6 +1918,32 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "workouts_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "domain.Stats": {
+            "type": "object",
+            "properties": {
+                "best_streak": {
+                    "type": "integer"
+                },
+                "buddies": {
+                    "type": "integer"
+                },
+                "comments": {
+                    "type": "integer"
+                },
+                "early_workouts": {
+                    "type": "integer"
+                },
+                "late_workouts": {
+                    "type": "integer"
+                },
+                "rooms": {
+                    "type": "integer"
+                },
+                "total_workouts": {
                     "type": "integer"
                 }
             }
@@ -2093,14 +2125,18 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "achievements": {
+                    "description": "the whole catalog, earned or not: a locked one carries its progress",
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/domain.Achievement"
+                        "$ref": "#/definitions/domain.AchievementProgress"
                     }
                 },
                 "best_streak": {
                     "description": "highest streak across the user rooms",
                     "type": "integer"
+                },
+                "stats": {
+                    "$ref": "#/definitions/domain.Stats"
                 },
                 "user": {
                     "$ref": "#/definitions/domain.User"
@@ -2183,11 +2219,14 @@ const docTemplate = `{
                 "achievements": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/domain.Achievement"
+                        "$ref": "#/definitions/domain.AchievementProgress"
                     }
                 },
                 "best_streak": {
                     "type": "integer"
+                },
+                "stats": {
+                    "$ref": "#/definitions/domain.Stats"
                 },
                 "user": {
                     "$ref": "#/definitions/domain.User"

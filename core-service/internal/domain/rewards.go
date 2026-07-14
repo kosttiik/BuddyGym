@@ -2,14 +2,6 @@ package domain
 
 import "time"
 
-const (
-	AchFirstCheckin = "first_checkin"
-	AchWorkouts10   = "workouts_10"
-	AchWorkouts50   = "workouts_50"
-	AchWorkouts100  = "workouts_100"
-	AchStreak7      = "streak_7"
-)
-
 // Ranks are derived from the workout total. The member cannot set them; what they can set
 // is the free-text status next to their name.
 const (
@@ -17,28 +9,6 @@ const (
 	RankRegular = "regular"
 	RankBeast   = "beast"
 )
-
-// EarnedAchievements returns every achievement the totals qualify for.
-// Already granted ones are filtered out by the storage layer on insert.
-func EarnedAchievements(totalWorkouts, streakDays int) []string {
-	var keys []string
-	if totalWorkouts >= 1 {
-		keys = append(keys, AchFirstCheckin)
-	}
-	if totalWorkouts >= 10 {
-		keys = append(keys, AchWorkouts10)
-	}
-	if totalWorkouts >= 50 {
-		keys = append(keys, AchWorkouts50)
-	}
-	if totalWorkouts >= 100 {
-		keys = append(keys, AchWorkouts100)
-	}
-	if streakDays >= 7 {
-		keys = append(keys, AchStreak7)
-	}
-	return keys
-}
 
 func RankFor(totalWorkouts int) string {
 	switch {

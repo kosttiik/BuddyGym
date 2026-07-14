@@ -53,12 +53,16 @@ definitions:
       lon:
         type: number
     type: object
-  domain.Achievement:
+  domain.AchievementProgress:
     properties:
+      current:
+        type: integer
       granted_at:
         type: string
       key:
         type: string
+      target:
+        type: integer
     type: object
   domain.Comment:
     properties:
@@ -171,6 +175,23 @@ definitions:
       votes_required:
         type: integer
       workouts_count:
+        type: integer
+    type: object
+  domain.Stats:
+    properties:
+      best_streak:
+        type: integer
+      buddies:
+        type: integer
+      comments:
+        type: integer
+      early_workouts:
+        type: integer
+      late_workouts:
+        type: integer
+      rooms:
+        type: integer
+      total_workouts:
         type: integer
     type: object
   domain.User:
@@ -299,12 +320,15 @@ definitions:
   httpapi.MeResponse:
     properties:
       achievements:
+        description: 'the whole catalog, earned or not: a locked one carries its progress'
         items:
-          $ref: '#/definitions/domain.Achievement'
+          $ref: '#/definitions/domain.AchievementProgress'
         type: array
       best_streak:
         description: highest streak across the user rooms
         type: integer
+      stats:
+        $ref: '#/definitions/domain.Stats'
       user:
         $ref: '#/definitions/domain.User'
     type: object
@@ -363,10 +387,12 @@ definitions:
     properties:
       achievements:
         items:
-          $ref: '#/definitions/domain.Achievement'
+          $ref: '#/definitions/domain.AchievementProgress'
         type: array
       best_streak:
         type: integer
+      stats:
+        $ref: '#/definitions/domain.Stats'
       user:
         $ref: '#/definitions/domain.User'
     type: object

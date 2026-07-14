@@ -8,23 +8,64 @@ import (
 
 func TestEarnedAchievements(t *testing.T) {
 	tests := []struct {
-		total, streak int
-		want          []string
+		name  string
+		stats Stats
+		want  []string
 	}{
-		{0, 0, nil},
-		{1, 0, []string{AchFirstCheckin}},
-		{9, 0, []string{AchFirstCheckin}},
-		{10, 0, []string{AchFirstCheckin, AchWorkouts10}},
-		{50, 0, []string{AchFirstCheckin, AchWorkouts10, AchWorkouts50}},
-		{100, 0, []string{AchFirstCheckin, AchWorkouts10, AchWorkouts50, AchWorkouts100}},
-		{1, 7, []string{AchFirstCheckin, AchStreak7}},
-		{0, 6, nil},
+		{"nothing yet", Stats{}, nil},
+		{"first workout", Stats{TotalWorkouts: 1}, []string{AchFirstCheckin}},
+		{"just short of ten", Stats{TotalWorkouts: 9}, []string{AchFirstCheckin}},
+		{"ten", Stats{TotalWorkouts: 10}, []string{AchFirstCheckin, AchWorkouts10}},
+		{"a streak without workouts is impossible, but the fold must not invent one",
+			Stats{BestStreak: 6}, nil},
+		{"a week long streak",
+			Stats{TotalWorkouts: 7, BestStreak: 7}, []string{AchFirstCheckin, AchStreak7}},
+		{"every metric at once", Stats{
+			TotalWorkouts: 250, BestStreak: 30, Rooms: 3, Buddies: 5, Comments: 10,
+			EarlyWorkouts: 10, LateWorkouts: 10,
+		}, []string{
+			AchFirstCheckin, AchWorkouts10, AchWorkouts50, AchWorkouts100, AchWorkouts250,
+			AchStreak7, AchStreak14, AchStreak30, AchRooms3, AchBuddies5, AchComments10,
+			AchEarlyBird10, AchNightOwl10,
+		}},
 	}
 	for _, tt := range tests {
-		got := EarnedAchievements(tt.total, tt.streak)
+		got := EarnedAchievements(tt.stats)
 		if !slices.Equal(got, tt.want) {
-			t.Errorf("EarnedAchievements(%d, %d) = %v, want %v", tt.total, tt.streak, got, tt.want)
+			t.Errorf("%s: EarnedAchievements = %v, want %v", tt.name, got, tt.want)
 		}
+	}
+}
+
+func TestProgress(t *testing.T) {
+	granted := []Achievement{{Key: AchFirstCheckin, GrantedAt: day("2026-07-01")}}
+	got := Progress(Stats{TotalWorkouts: 4}, granted)
+
+	if len(got) != len(Catalog) {
+		t.Fatalf("got %d entries, want the whole catalog (%d)", len(got), len(Catalog))
+	}
+
+	byKey := map[string]AchievementProgress{}
+	for _, p := range got {
+		byKey[p.Key] = p
+	}
+
+	// an earned one reads as complete and carries its date
+	first := byKey[AchFirstCheckin]
+	if first.Current != 1 || first.Target != 1 || first.GrantedAt == nil {
+		t.Errorf("first_checkin = %+v, want it complete and dated", first)
+	}
+
+	// a locked one carries real progress rather than a dead zero
+	ten := byKey[AchWorkouts10]
+	if ten.Current != 4 || ten.Target != 10 || ten.GrantedAt != nil {
+		t.Errorf("workouts_10 = %+v, want 4/10 and no date", ten)
+	}
+
+	// progress never overshoots the target: the bar would run off the tile
+	hundred := byKey[AchWorkouts100]
+	if got := Progress(Stats{TotalWorkouts: 400}, nil); got[3].Current != got[3].Target {
+		t.Errorf("workouts_100 = %+v, want it clamped to the target", hundred)
 	}
 }
 
