@@ -26,7 +26,7 @@ func NewResults(pool *pgxpool.Pool) *Results {
 // Apply records a final checkin result exactly once. On an approved result
 // it bumps the member period counter, resetting it when the period rolled over.
 // Returns applied=false when this checkin_id was already processed.
-func (r *Results) Apply(ctx context.Context, checkinID string, roomID, userID int64, status string) (bool, error) {
+func (r *Results) Apply(ctx context.Context, checkinID string, roomID, userID int64, status string, createdAt time.Time) (bool, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return false, err
@@ -34,9 +34,9 @@ func (r *Results) Apply(ctx context.Context, checkinID string, roomID, userID in
 	defer tx.Rollback(ctx)
 
 	tag, err := tx.Exec(ctx, `
-		INSERT INTO checkin_results (checkin_id, room_id, user_id, status)
-		VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING`,
-		checkinID, roomID, userID, status)
+		INSERT INTO checkin_results (checkin_id, room_id, user_id, status, checkin_created_at)
+		VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING`,
+		checkinID, roomID, userID, status, createdAt)
 	if err != nil {
 		return false, err
 	}
@@ -50,10 +50,10 @@ func (r *Results) Apply(ctx context.Context, checkinID string, roomID, userID in
 			UPDATE memberships m SET
 				workouts_count = CASE WHEN now() >= m.period_start + r.period_days * interval '1 day'
 				                      THEN 1 ELSE (
-						SELECT count(DISTINCT (cr.applied_at AT TIME ZONE 'UTC')::date)::int
+						SELECT count(DISTINCT (cr.checkin_created_at AT TIME ZONE 'UTC')::date)::int
 						FROM checkin_results cr
 						WHERE cr.room_id = m.room_id AND cr.user_id = m.user_id
-						  AND cr.status = 'approved' AND cr.applied_at >= m.period_start
+						  AND cr.status = 'approved' AND cr.checkin_created_at >= m.period_start
 					) END,
 				period_start = CASE WHEN now() >= m.period_start + r.period_days * interval '1 day'
 				                    THEN now() ELSE m.period_start END
@@ -78,7 +78,7 @@ func (r *Results) TotalApproved(ctx context.Context, userID int64) (int, error) 
 // WorkoutDays returns distinct UTC dates of approved checkins, newest first.
 func (r *Results) WorkoutDays(ctx context.Context, userID int64, limit int) ([]time.Time, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT DISTINCT (applied_at AT TIME ZONE 'UTC')::date AS day
+		SELECT DISTINCT (checkin_created_at AT TIME ZONE 'UTC')::date AS day
 		FROM checkin_results
 		WHERE user_id = $1 AND status = $2
 		ORDER BY day DESC

@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	pbv1 "github.com/kosttiik/BuddyGym/core-service/internal/pb/buddygym/v1"
 
@@ -65,17 +66,19 @@ type resultKey struct {
 type fakeResults struct {
 	seen   map[string]bool
 	counts map[resultKey]int
-	days   map[int64][]time.Time
+	days    map[int64][]time.Time
+	applied []time.Time
 }
 
-func (f *fakeResults) Apply(_ context.Context, checkinID string, roomID, userID int64, st string) (bool, error) {
+func (f *fakeResults) Apply(_ context.Context, checkinID string, roomID, userID int64, st string, createdAt time.Time) (bool, error) {
 	if f.seen[checkinID] {
 		return false, nil
 	}
 	f.seen[checkinID] = true
 	if st == storage.ResultApproved {
 		f.counts[resultKey{roomID, userID}]++
-		f.days[userID] = append([]time.Time{time.Now()}, f.days[userID]...)
+		f.days[userID] = append([]time.Time{createdAt}, f.days[userID]...)
+		f.applied = append(f.applied, createdAt)
 	}
 	return true, nil
 }
@@ -175,6 +178,35 @@ func TestApplyCheckinResultApproved(t *testing.T) {
 	}
 	if resp.WorkoutsCount != 1 || len(resp.GrantedAchievements) != 0 {
 		t.Errorf("repeat: count=%d granted=%v", resp.WorkoutsCount, resp.GrantedAchievements)
+	}
+}
+
+func TestApplyCheckinResultUsesWorkoutTime(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+
+	loggedAt := time.Date(2026, 3, 4, 23, 50, 0, 0, time.UTC)
+	_, err := e.client.ApplyCheckinResult(ctx, &pbv1.ApplyCheckinResultRequest{
+		CheckinId: "c1", RoomId: 1, UserId: 7,
+		Status:           pbv1.CheckinStatus_CHECKIN_STATUS_APPROVED,
+		CheckinCreatedAt: timestamppb.New(loggedAt),
+	})
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if len(e.results.applied) != 1 || !e.results.applied[0].Equal(loggedAt) {
+		t.Fatalf("recorded %v, want the workout time %v", e.results.applied, loggedAt)
+	}
+
+	_, err = e.client.ApplyCheckinResult(ctx, &pbv1.ApplyCheckinResultRequest{
+		CheckinId: "c2", RoomId: 1, UserId: 7,
+		Status: pbv1.CheckinStatus_CHECKIN_STATUS_APPROVED,
+	})
+	if err != nil {
+		t.Fatalf("apply without timestamp: %v", err)
+	}
+	if len(e.results.applied) != 2 || e.results.applied[1].IsZero() {
+		t.Fatalf("fallback recorded %v, want a real time", e.results.applied)
 	}
 }
 
