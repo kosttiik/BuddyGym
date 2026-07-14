@@ -53,6 +53,9 @@ func (s *Server) handleAuthTelegram(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, err)
 		return
 	}
+	if s.avatarMirror != nil {
+		s.avatarMirror.SyncInBackground(user.ID, tg.PhotoURL, user.AvatarSource)
+	}
 	token, err := auth.IssueToken(s.jwtSecret, user.ID, s.jwtTTL, s.now())
 	if err != nil {
 		s.internal(w, err)

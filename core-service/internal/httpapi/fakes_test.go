@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -55,6 +56,22 @@ func (f *fakeUsers) UpdateTheme(_ context.Context, id int64, theme string) (doma
 
 func (f *fakeUsers) Achievements(_ context.Context, userID int64) ([]domain.Achievement, error) {
 	return f.achs[userID], nil
+}
+
+type fakeAvatars struct {
+	objects map[string][]byte
+}
+
+func newFakeAvatars() *fakeAvatars {
+	return &fakeAvatars{objects: map[string][]byte{}}
+}
+
+func (f *fakeAvatars) Open(_ context.Context, key string) (io.ReadCloser, string, error) {
+	data, ok := f.objects[key]
+	if !ok {
+		return nil, "", storage.ErrNotFound
+	}
+	return io.NopCloser(bytes.NewReader(data)), "image/jpeg", nil
 }
 
 type fakeRooms struct {

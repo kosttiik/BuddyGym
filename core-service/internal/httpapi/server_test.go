@@ -64,17 +64,24 @@ type env struct {
 	users    *fakeUsers
 	rooms    *fakeRooms
 	checkins *fakeCheckins
+	avatars  *fakeAvatars
 	handler  http.Handler
 	dbErr    error
 	redisErr error
 }
 
 func newEnv(opts ...func(*httpapi.Options)) *env {
-	e := &env{users: newFakeUsers(), rooms: newFakeRooms(), checkins: newFakeCheckins()}
+	e := &env{
+		users:    newFakeUsers(),
+		rooms:    newFakeRooms(),
+		checkins: newFakeCheckins(),
+		avatars:  newFakeAvatars(),
+	}
 	o := httpapi.Options{
 		Users:     e.users,
 		Rooms:     e.rooms,
 		Checkins:  e.checkins,
+		Avatars:   e.avatars,
 		BotToken:  testToken,
 		AuthTTL:   24 * time.Hour,
 		JWTSecret: jwtSecret,
@@ -343,6 +350,30 @@ func TestListOpenRooms(t *testing.T) {
 	mine := decode[[]domain.Room](t, e.do(t, "GET", "/api/v1/rooms/open", nil, reqOpts{userID: 1}))
 	if len(mine) != 0 {
 		t.Errorf("open rooms for a member: %+v", mine)
+	}
+}
+
+// Telegram avatar hosts are unreachable for our users, so the bytes are proxied by core.
+func TestGetAvatar(t *testing.T) {
+	e := newEnv()
+	e.users.users[9] = domain.User{ID: 9, FirstName: "Ann", AvatarKey: "avatars/9", HasAvatar: true}
+	e.avatars.objects["avatars/9"] = []byte("jpeg-bytes")
+
+	rec := e.do(t, "GET", "/api/v1/users/9/avatar", nil, reqOpts{userID: 1})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get avatar: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec.Body.String() != "jpeg-bytes" {
+		t.Errorf("body = %q, want the stored bytes", rec.Body.String())
+	}
+	if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Errorf("nosniff header = %q", got)
+	}
+
+	e.users.users[10] = domain.User{ID: 10, FirstName: "Bob"}
+	rec = e.do(t, "GET", "/api/v1/users/10/avatar", nil, reqOpts{userID: 1})
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("avatar of a user without one: %d, want 404", rec.Code)
 	}
 }
 
