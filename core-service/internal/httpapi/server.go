@@ -20,6 +20,7 @@ type UsersRepo interface {
 	UpdateTheme(ctx context.Context, id int64, theme string) (domain.User, error)
 	SetStatus(ctx context.Context, id int64, emoji, text string) (domain.User, error)
 	Achievements(ctx context.Context, userID int64) ([]domain.Achievement, error)
+	Stats(ctx context.Context, userID int64) (domain.Stats, error)
 }
 
 type RoomsRepo interface {

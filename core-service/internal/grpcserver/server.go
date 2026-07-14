@@ -20,6 +20,7 @@ import (
 type UsersRepo interface {
 	Grant(ctx context.Context, userID int64, keys []string) ([]string, error)
 	SetRank(ctx context.Context, id int64, rank string) error
+	Stats(ctx context.Context, userID int64) (domain.Stats, error)
 }
 
 type RoomsRepo interface {
@@ -33,7 +34,6 @@ type BuddiesRepo interface {
 
 type ResultsRepo interface {
 	Apply(ctx context.Context, checkinID string, roomID, userID int64, status string, createdAt time.Time) (bool, error)
-	TotalApproved(ctx context.Context, userID int64) (int, error)
 	StreaksByUser(ctx context.Context, userID int64) ([]domain.StreakInput, error)
 	PeriodCount(ctx context.Context, roomID, userID int64) (int, error)
 }
@@ -131,7 +131,7 @@ func (s *Server) creditBuddies(ctx context.Context, checkinID string, roomID int
 }
 
 func (s *Server) reward(ctx context.Context, userID int64) ([]string, error) {
-	total, err := s.results.TotalApproved(ctx, userID)
+	stats, err := s.users.Stats(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -139,12 +139,13 @@ func (s *Server) reward(ctx context.Context, userID int64) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	earned := domain.EarnedAchievements(total, domain.BestStreak(streaks, s.now()))
-	granted, err := s.users.Grant(ctx, userID, earned)
+	stats.BestStreak = domain.BestStreak(streaks, s.now())
+
+	granted, err := s.users.Grant(ctx, userID, domain.EarnedAchievements(stats))
 	if err != nil {
 		return nil, err
 	}
-	if err := s.users.SetRank(ctx, userID, domain.RankFor(total)); err != nil {
+	if err := s.users.SetRank(ctx, userID, domain.RankFor(stats.TotalWorkouts)); err != nil {
 		return granted, err
 	}
 	return granted, nil

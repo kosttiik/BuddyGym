@@ -19,8 +19,20 @@ func TestGetUserProfile(t *testing.T) {
 		t.Fatalf("get user: %d %s", rec.Code, rec.Body.String())
 	}
 	resp := decode[httpapi.UserProfileResponse](t, rec)
-	if resp.User.ID != 2 || len(resp.Achievements) != 1 {
+	if resp.User.ID != 2 {
 		t.Fatalf("unexpected profile: %+v", resp)
+	}
+	// the whole catalog comes back, locked entries included, each with its progress
+	if len(resp.Achievements) != len(domain.Catalog) {
+		t.Fatalf("got %d achievements, want the whole catalog (%d)",
+			len(resp.Achievements), len(domain.Catalog))
+	}
+	first := resp.Achievements[0]
+	if first.Key != domain.AchFirstCheckin || first.GrantedAt == nil {
+		t.Errorf("first_checkin = %+v, want it granted", first)
+	}
+	if locked := resp.Achievements[1]; locked.GrantedAt != nil || locked.Target != 10 {
+		t.Errorf("workouts_10 = %+v, want it locked with its target", locked)
 	}
 
 	if rec := e.do(t, "GET", "/api/v1/users/999", nil, reqOpts{userID: 1}); rec.Code != http.StatusNotFound {

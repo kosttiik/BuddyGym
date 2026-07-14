@@ -8,9 +8,10 @@ import (
 )
 
 type UserProfileResponse struct {
-	User         domain.User          `json:"user"`
-	Achievements []domain.Achievement `json:"achievements"`
-	BestStreak   int                  `json:"best_streak"`
+	User         domain.User                  `json:"user"`
+	Achievements []domain.AchievementProgress `json:"achievements"`
+	Stats        domain.Stats                 `json:"stats"`
+	BestStreak   int                          `json:"best_streak"`
 }
 
 // handleGetUser godoc
@@ -38,22 +39,15 @@ func (s *Server) handleGetUser(w http.ResponseWriter, r *http.Request) {
 		s.mapError(w, err)
 		return
 	}
-	achs, err := s.users.Achievements(r.Context(), id)
-	if err != nil {
-		s.internal(w, err)
-		return
-	}
-	if achs == nil {
-		achs = []domain.Achievement{}
-	}
-	streaks, err := s.streaks.StreaksByUser(r.Context(), id)
+	progress, stats, err := s.profile(r, id)
 	if err != nil {
 		s.internal(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, UserProfileResponse{
 		User:         user,
-		Achievements: achs,
-		BestStreak:   domain.BestStreak(streaks, s.now()),
+		Achievements: progress,
+		Stats:        stats,
+		BestStreak:   stats.BestStreak,
 	})
 }
