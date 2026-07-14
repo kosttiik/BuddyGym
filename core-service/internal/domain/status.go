@@ -50,3 +50,21 @@ func NormalizeStatusEmoji(emoji string) (string, error) {
 	}
 	return emoji, nil
 }
+
+const MaxCommentLen = 500
+
+var (
+	ErrCommentEmpty   = errors.New("comment must not be empty")
+	ErrCommentTooLong = errors.New("comment must be at most 500 characters")
+)
+
+func NormalizeComment(body string) (string, error) {
+	body = strings.TrimSpace(body)
+	if body == "" {
+		return "", ErrCommentEmpty
+	}
+	if uniseg.GraphemeClusterCount(body) > MaxCommentLen {
+		return "", ErrCommentTooLong
+	}
+	return body, nil
+}

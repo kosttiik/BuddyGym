@@ -35,8 +35,9 @@ type Checkin struct {
 	PhotoPurged    bool       `json:"photo_purged"`
 	PhotoExpiresAt *time.Time `json:"photo_expires_at,omitempty"`
 	Geo            *Geo       `json:"geo,omitempty"`
-	// people the author tagged as training with them; filled in by core, not checkin-service
+	// filled in by core, not checkin-service
 	Buddies        []domain.User `json:"buddies,omitempty"`
+	CommentsCount  int           `json:"comments_count"`
 	VotesApprove   int32         `json:"votes_approve"`
 	VotesReject    int32      `json:"votes_reject"`
 	VotesRequired  int32      `json:"votes_required"`

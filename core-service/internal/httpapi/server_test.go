@@ -65,6 +65,7 @@ type env struct {
 	rooms    *fakeRooms
 	streaks  *fakeStreaks
 	buddies  *fakeBuddies
+	comments *fakeComments
 	checkins *fakeCheckins
 	avatars  *fakeAvatars
 	handler  http.Handler
@@ -81,11 +82,13 @@ func newEnv(opts ...func(*httpapi.Options)) *env {
 		avatars:  newFakeAvatars(),
 	}
 	e.buddies = newFakeBuddies(e.users)
+	e.comments = newFakeComments(e.users, e.rooms)
 	o := httpapi.Options{
 		Users:     e.users,
 		Rooms:     e.rooms,
 		Streaks:   e.streaks,
 		Buddies:   e.buddies,
+		Comments:  e.comments,
 		Checkins:  e.checkins,
 		Avatars:   e.avatars,
 		BotToken:  testToken,
@@ -887,4 +890,62 @@ var pngBytes = []byte{
 	0x0a, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x00, 0x01, 0x00, 0x00,
 	0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49,
 	0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+}
+
+func TestCheckinComments(t *testing.T) {
+	e := newEnv()
+	room := e.createRoom(t, 1, domain.RoomOpen)
+	e.users.users[2] = domain.User{ID: 2, FirstName: "Ann"}
+	e.users.users[3] = domain.User{ID: 3, FirstName: "Stranger"}
+	if err := e.rooms.Join(t.Context(), room.ID, 2); err != nil {
+		t.Fatal(err)
+	}
+
+	buf, ct := photoForm(t, pngBytes, room.ID)
+	rec := e.do(t, "POST", "/api/v1/checkins", buf, reqOpts{userID: 1, contentType: ct})
+	id := decode[[]checkin.Checkin](t, rec)[0].ID
+
+	rec = e.do(t, "POST", "/api/v1/checkins/"+id+"/comments",
+		httpapi.CommentRequest{Body: "  Красавчик  "}, reqOpts{userID: 2})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("comment: %d %s", rec.Code, rec.Body.String())
+	}
+	comment := decode[domain.Comment](t, rec)
+	if comment.Body != "Красавчик" || comment.Author.ID != 2 {
+		t.Errorf("comment = %+v, want the trimmed body and the author", comment)
+	}
+
+	rec = e.do(t, "GET", "/api/v1/checkins/"+id+"/comments", nil, reqOpts{userID: 1})
+	if list := decode[[]domain.Comment](t, rec); len(list) != 1 {
+		t.Errorf("list = %+v, want one comment", list)
+	}
+
+	// the count rides along with the feed, so a card can show it without a second request
+	rec = e.do(t, "GET", "/api/v1/rooms/"+strconv.FormatInt(room.ID, 10)+"/checkins", nil, reqOpts{userID: 1})
+	if feed := decode[[]checkin.Checkin](t, rec); len(feed) != 1 || feed[0].CommentsCount != 1 {
+		t.Errorf("feed = %+v, want comments_count 1", feed)
+	}
+
+	bad := []httpapi.CommentRequest{{Body: "   "}, {Body: strings.Repeat("я", 501)}}
+	for i, req := range bad {
+		if rec := e.do(t, "POST", "/api/v1/checkins/"+id+"/comments", req, reqOpts{userID: 2}); rec.Code != http.StatusBadRequest {
+			t.Errorf("case %d: %d, want 400", i, rec.Code)
+		}
+	}
+
+	rec = e.do(t, "POST", "/api/v1/checkins/"+id+"/comments",
+		httpapi.CommentRequest{Body: "hi"}, reqOpts{userID: 3})
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("non-member comment: %d, want 403", rec.Code)
+	}
+
+	// the room creator moderates: they can delete a comment they did not write
+	path := "/api/v1/checkins/" + id + "/comments/" + strconv.FormatInt(comment.ID, 10)
+	if rec := e.do(t, "DELETE", path, nil, reqOpts{userID: 1}); rec.Code != http.StatusNoContent {
+		t.Fatalf("delete by the room creator: %d %s", rec.Code, rec.Body.String())
+	}
+	rec = e.do(t, "GET", "/api/v1/checkins/"+id+"/comments", nil, reqOpts{userID: 1})
+	if list := decode[[]domain.Comment](t, rec); len(list) != 0 {
+		t.Errorf("list after delete = %+v", list)
+	}
 }

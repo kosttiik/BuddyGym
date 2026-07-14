@@ -60,3 +60,12 @@ type Member struct {
 	Streak        int       `json:"streak"`
 	PeriodEndsAt  time.Time `json:"period_ends_at"`
 }
+
+type Comment struct {
+	ID        int64     `json:"id"`
+	CheckinID string    `json:"checkin_id"`
+	UserID    int64     `json:"user_id"`
+	Author    User      `json:"author"`
+	Body      string    `json:"body"`
+	CreatedAt time.Time `json:"created_at"`
+}

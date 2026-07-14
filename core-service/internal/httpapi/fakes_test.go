@@ -170,14 +170,75 @@ func (f *fakeBuddies) ForCheckins(_ context.Context, checkinIDs []string) (map[s
 	return out, nil
 }
 
+type fakeComments struct {
+	byCheckin map[string][]domain.Comment
+	users     *fakeUsers
+	rooms     *fakeRooms
+	nextID    int64
+}
+
+func newFakeComments(users *fakeUsers, rooms *fakeRooms) *fakeComments {
+	return &fakeComments{byCheckin: map[string][]domain.Comment{}, users: users, rooms: rooms}
+}
+
+func (f *fakeComments) Add(_ context.Context, checkinID string, roomID, userID int64, body string) (domain.Comment, error) {
+	f.nextID++
+	c := domain.Comment{
+		ID: f.nextID, CheckinID: checkinID, UserID: userID,
+		Author: f.users.users[userID], Body: body, CreatedAt: time.Now(),
+	}
+	f.byCheckin[checkinID] = append(f.byCheckin[checkinID], c)
+	f.rooms.commentRoom[c.ID] = roomID
+	return c, nil
+}
+
+func (f *fakeComments) List(_ context.Context, checkinID string, limit, offset int) ([]domain.Comment, error) {
+	all := f.byCheckin[checkinID]
+	if offset >= len(all) {
+		return nil, nil
+	}
+	return all[offset:min(offset+limit, len(all))], nil
+}
+
+func (f *fakeComments) Delete(_ context.Context, id, userID int64) error {
+	for checkinID, list := range f.byCheckin {
+		for i, c := range list {
+			if c.ID != id {
+				continue
+			}
+			roomID := f.rooms.commentRoom[id]
+			creator := f.rooms.rooms[roomID].CreatorID
+			if c.UserID != userID && creator != userID {
+				return storage.ErrNotFound
+			}
+			f.byCheckin[checkinID] = append(list[:i], list[i+1:]...)
+			return nil
+		}
+	}
+	return storage.ErrNotFound
+}
+
+func (f *fakeComments) CountsFor(_ context.Context, checkinIDs []string) (map[string]int, error) {
+	out := map[string]int{}
+	for _, id := range checkinIDs {
+		out[id] = len(f.byCheckin[id])
+	}
+	return out, nil
+}
+
 type fakeRooms struct {
-	rooms   map[int64]domain.Room
-	members map[int64]map[int64]time.Time
-	nextID  int64
+	rooms       map[int64]domain.Room
+	members     map[int64]map[int64]time.Time
+	commentRoom map[int64]int64
+	nextID      int64
 }
 
 func newFakeRooms() *fakeRooms {
-	return &fakeRooms{rooms: map[int64]domain.Room{}, members: map[int64]map[int64]time.Time{}}
+	return &fakeRooms{
+		rooms:       map[int64]domain.Room{},
+		members:     map[int64]map[int64]time.Time{},
+		commentRoom: map[int64]int64{},
+	}
 }
 
 func (f *fakeRooms) Create(_ context.Context, room domain.Room) (domain.Room, error) {

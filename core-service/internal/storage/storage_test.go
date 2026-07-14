@@ -575,3 +575,46 @@ func TestBuddiesTagUntag(t *testing.T) {
 		t.Errorf("Untag of a missing tag = %v, want ErrNotFound", err)
 	}
 }
+
+func TestCommentsDeletePermissions(t *testing.T) {
+	ctx := context.Background()
+	comments := storage.NewComments(pool(t))
+	rooms := storage.NewRooms(pool(t))
+	mustUser(t, 501)
+	mustUser(t, 502)
+	mustUser(t, 503)
+	room := mustRoom(t, 501)
+	if err := rooms.Join(ctx, room.ID, 502); err != nil {
+		t.Fatal(err)
+	}
+
+	mine, err := comments.Add(ctx, "chk-c1", room.ID, 502, "nice")
+	if err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	if mine.Author.ID != 502 || mine.Body != "nice" {
+		t.Fatalf("comment = %+v", mine)
+	}
+
+	// a stranger cannot delete someone else's comment
+	if err := comments.Delete(ctx, mine.ID, 503); !errors.Is(err, storage.ErrNotFound) {
+		t.Errorf("delete by a stranger = %v, want ErrNotFound", err)
+	}
+	// the room creator moderates
+	if err := comments.Delete(ctx, mine.ID, 501); err != nil {
+		t.Errorf("delete by the room creator: %v", err)
+	}
+
+	own, err := comments.Add(ctx, "chk-c1", room.ID, 502, "again")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := comments.Delete(ctx, own.ID, 502); err != nil {
+		t.Errorf("delete of my own comment: %v", err)
+	}
+
+	counts, err := comments.CountsFor(ctx, []string{"chk-c1"})
+	if err != nil || counts["chk-c1"] != 0 {
+		t.Errorf("CountsFor = %v (%v), want 0", counts, err)
+	}
+}

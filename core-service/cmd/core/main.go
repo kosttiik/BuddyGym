@@ -143,6 +143,7 @@ func run(log *slog.Logger) error {
 	checkinClient := checkin.NewClient(conn)
 	results := storage.NewResults(pool)
 	buddies := storage.NewBuddies(pool)
+	comments := storage.NewComments(pool)
 
 	// avatars are optional: without object storage the mini app falls back to initials.
 	// these stay interface-typed so a disabled mirror is a nil interface, not a typed nil.
@@ -165,6 +166,7 @@ func run(log *slog.Logger) error {
 		Rooms:          rooms,
 		Streaks:        results,
 		Buddies:        buddies,
+		Comments:       comments,
 		Checkins:       checkinClient,
 		Avatars:        avatarStore,
 		AvatarMirror:   avatarMirror,

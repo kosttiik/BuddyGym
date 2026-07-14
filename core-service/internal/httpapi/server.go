@@ -51,6 +51,13 @@ type BuddiesRepo interface {
 	ForCheckins(ctx context.Context, checkinIDs []string) (map[string][]domain.User, error)
 }
 
+type CommentsRepo interface {
+	Add(ctx context.Context, checkinID string, roomID, userID int64, body string) (domain.Comment, error)
+	List(ctx context.Context, checkinID string, limit, offset int) ([]domain.Comment, error)
+	Delete(ctx context.Context, id, userID int64) error
+	CountsFor(ctx context.Context, checkinIDs []string) (map[string]int, error)
+}
+
 type StreaksRepo interface {
 	StreaksByRoom(ctx context.Context, roomID int64) ([]domain.StreakInput, error)
 	StreaksByUser(ctx context.Context, userID int64) ([]domain.StreakInput, error)
@@ -75,6 +82,7 @@ type Server struct {
 	rooms        RoomsRepo
 	streaks      StreaksRepo
 	buddies      BuddiesRepo
+	comments     CommentsRepo
 	checkins     CheckinClient
 	avatars      AvatarStore
 	avatarMirror AvatarMirror
@@ -98,6 +106,7 @@ type Options struct {
 	Rooms          RoomsRepo
 	Streaks        StreaksRepo
 	Buddies        BuddiesRepo
+	Comments       CommentsRepo
 	Checkins       CheckinClient
 	Avatars        AvatarStore
 	AvatarMirror   AvatarMirror
@@ -126,6 +135,7 @@ func New(opts Options) *Server {
 		rooms:          opts.Rooms,
 		streaks:        opts.Streaks,
 		buddies:        opts.Buddies,
+		comments:       opts.Comments,
 		checkins:       opts.Checkins,
 		avatars:        opts.Avatars,
 		avatarMirror:   opts.AvatarMirror,
@@ -171,6 +181,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/checkins/{id}/vote", s.withAuth(s.handleVote))
 	mux.HandleFunc("POST /api/v1/checkins/{id}/buddies", s.withAuth(s.handleAddBuddies))
 	mux.HandleFunc("DELETE /api/v1/checkins/{id}/buddies/{userId}", s.withAuth(s.handleRemoveBuddy))
+	mux.HandleFunc("GET /api/v1/checkins/{id}/comments", s.withAuth(s.handleListComments))
+	mux.HandleFunc("POST /api/v1/checkins/{id}/comments", s.withAuth(s.handleAddComment))
+	mux.HandleFunc("DELETE /api/v1/checkins/{id}/comments/{commentId}", s.withAuth(s.handleDeleteComment))
 
 	return s.withLogging(mux)
 }
