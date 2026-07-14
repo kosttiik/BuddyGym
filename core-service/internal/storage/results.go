@@ -26,48 +26,21 @@ func NewResults(pool *pgxpool.Pool) *Results {
 	return &Results{pool: pool}
 }
 
-// Apply records a final checkin result exactly once. On an approved result
-// it bumps the member period counter, resetting it when the period rolled over.
-// Returns applied=false when this checkin_id was already processed.
+// Apply records a final checkin result exactly once, guarded by the checkin_id primary key.
+// Returns applied=false when this checkin_id was already processed. Period counters are
+// derived from these rows on read, so there is nothing else to keep in sync here.
+//
+// ponytail: memberships.workouts_count and period_start are now written by nobody and read by
+// nobody. Left in place so a rollback still finds them; drop them once this ships and sticks.
 func (r *Results) Apply(ctx context.Context, checkinID string, roomID, userID int64, status string, createdAt time.Time) (bool, error) {
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return false, err
-	}
-	defer tx.Rollback(ctx)
-
-	tag, err := tx.Exec(ctx, `
+	tag, err := r.pool.Exec(ctx, `
 		INSERT INTO checkin_results (checkin_id, room_id, user_id, status, checkin_created_at)
 		VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING`,
 		checkinID, roomID, userID, status, createdAt)
 	if err != nil {
 		return false, err
 	}
-	if tag.RowsAffected() == 0 {
-		return false, nil
-	}
-
-	if status == ResultApproved {
-		// user may have left the room by now, then there is nothing to bump
-		_, err = tx.Exec(ctx, `
-			UPDATE memberships m SET
-				workouts_count = CASE WHEN now() >= m.period_start + r.period_days * interval '1 day'
-				                      THEN 1 ELSE (
-						SELECT count(DISTINCT (cr.checkin_created_at AT TIME ZONE 'UTC')::date)::int
-						FROM checkin_results cr
-						WHERE cr.room_id = m.room_id AND cr.user_id = m.user_id
-						  AND cr.status = 'approved' AND cr.checkin_created_at >= m.period_start
-					) END,
-				period_start = CASE WHEN now() >= m.period_start + r.period_days * interval '1 day'
-				                    THEN now() ELSE m.period_start END
-			FROM rooms r
-			WHERE r.id = m.room_id AND m.room_id = $1 AND m.user_id = $2`,
-			roomID, userID)
-		if err != nil {
-			return false, err
-		}
-	}
-	return true, tx.Commit(ctx)
+	return tag.RowsAffected() > 0, nil
 }
 
 func (r *Results) TotalApproved(ctx context.Context, userID int64) (int, error) {

@@ -305,34 +305,36 @@ func TestResultsApplyIdempotent(t *testing.T) {
 	}
 }
 
+// The room is goal 3 per 7 days. With the member joined 10 days ago the grid is on its
+// second period, so workouts from the first one must not count toward the current goal.
 func TestResultsPeriodRollover(t *testing.T) {
 	ctx := context.Background()
 	results := storage.NewResults(pool(t))
 	mustUser(t, 107)
 	room := mustRoom(t, 107)
 
-	if _, err := results.Apply(ctx, "chk-r1", room.ID, 107, storage.ResultApproved, time.Now()); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := results.Apply(ctx, "chk-r2", room.ID, 107, storage.ResultApproved, time.Now()); err != nil {
-		t.Fatal(err)
-	}
-
 	_, err := pool(t).Exec(ctx,
-		"UPDATE memberships SET period_start = now() - interval '8 days' WHERE room_id = $1", room.ID)
+		"UPDATE memberships SET joined_at = now() - interval '10 days' WHERE room_id = $1", room.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	now := time.Now()
+	for i, id := range []string{"chk-r1", "chk-r2"} {
+		day := now.AddDate(0, 0, -10+i)
+		if _, err := results.Apply(ctx, id, room.ID, 107, storage.ResultApproved, day); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if count, _ := results.PeriodCount(ctx, room.ID, 107); count != 0 {
-		t.Errorf("stale period count = %d, want 0", count)
+		t.Errorf("count from the closed period = %d, want 0", count)
 	}
 
-	if _, err := results.Apply(ctx, "chk-r3", room.ID, 107, storage.ResultApproved, time.Now()); err != nil {
+	if _, err := results.Apply(ctx, "chk-r3", room.ID, 107, storage.ResultApproved, now); err != nil {
 		t.Fatal(err)
 	}
 	if count, _ := results.PeriodCount(ctx, room.ID, 107); count != 1 {
-		t.Errorf("count after rollover = %d, want 1", count)
+		t.Errorf("count in the current period = %d, want 1", count)
 	}
 	if total, _ := results.TotalApproved(ctx, 107); total != 3 {
 		t.Errorf("total = %d, want 3", total)
