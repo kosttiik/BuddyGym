@@ -1,7 +1,7 @@
 PROTO_DIR := proto
 PROTO_FILES := $(shell find $(PROTO_DIR) -name '*.proto')
 CORE_DIR := core-service
-CHECKIN_DIR := ../BuddyGym-CheckIn
+CHECKIN_DIR := checkin-service
 
 .PHONY: proto proto-py swagger build test vet run up down
 

@@ -31,13 +31,16 @@ flowchart TB
 
 ## Workspace layout
 
-The three repositories are cloned side by side. Compose and proto generation rely on these paths.
+The other two repositories are cloned into this one (both are gitignored). Compose and proto
+generation rely on these paths.
 
 ```text
-BuddyGym-project/
-├── BuddyGym/         Go + compose + shared proto
-├── BuddyGym-CheckIn/  Python (separate repository)
-└── BuddyGym-Frontend/ Telegram Mini App (separate repository)
+BuddyGym/
+├── core-service/     Go (this repository)
+├── checkin-service/  Python (separate repository)
+├── frontend/         Telegram Mini App (separate repository)
+├── proto/            shared gRPC contracts
+└── docker-compose.yml
 ```
 
 ## Check-ins and photos

@@ -1736,6 +1736,9 @@ const docTemplate = `{
         "checkin.Geo": {
             "type": "object",
             "properties": {
+                "horizontal_accuracy": {
+                    "type": "number"
+                },
                 "lat": {
                     "type": "number"
                 },

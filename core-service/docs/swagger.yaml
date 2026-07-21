@@ -48,6 +48,8 @@ definitions:
     type: object
   checkin.Geo:
     properties:
+      horizontal_accuracy:
+        type: number
       lat:
         type: number
       lon:
