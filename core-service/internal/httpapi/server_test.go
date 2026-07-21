@@ -1033,78 +1033,97 @@ func TestCommentWithPhoto(t *testing.T) {
 	}
 }
 
-// A room picture is uploaded by the creator and served back to any member.
-func TestRoomAvatarUploadAndDownload(t *testing.T) {
+// Any member may add a room picture; the older ones stay browsable in the gallery.
+func TestRoomAvatarGalleryOverHTTP(t *testing.T) {
 	e := newEnv()
 	room := e.createRoom(t, 1, domain.RoomOpen)
-	path := "/api/v1/rooms/" + strconv.FormatInt(room.ID, 10) + "/avatar"
+	if err := e.rooms.Join(t.Context(), room.ID, 2); err != nil {
+		t.Fatal(err)
+	}
+	base := "/api/v1/rooms/" + strconv.FormatInt(room.ID, 10)
 
-	rec := e.do(t, "GET", path, nil, reqOpts{userID: 1})
-	if rec.Code != http.StatusNotFound {
+	if rec := e.do(t, "GET", base+"/avatar", nil, reqOpts{userID: 1}); rec.Code != http.StatusNotFound {
 		t.Fatalf("picture before upload: %d, want 404", rec.Code)
 	}
 
 	buf, ct := photoForm(t, pngBytes)
-	rec = e.do(t, "PUT", path, buf, reqOpts{userID: 1, contentType: ct})
-	if rec.Code != http.StatusOK {
-		t.Fatalf("upload: %d %s", rec.Code, rec.Body.String())
+	rec := e.do(t, "PUT", base+"/avatar", buf, reqOpts{userID: 1, contentType: ct})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("upload by the creator: %d %s", rec.Code, rec.Body.String())
 	}
-	if updated := decode[domain.Room](t, rec); !updated.HasAvatar {
-		t.Error("uploaded room reports has_avatar = false")
+	first := decode[domain.RoomAvatar](t, rec)
+
+	// a plain member replaces it, and the room now wears their picture
+	buf, ct = photoForm(t, []byte("GIF89a-second-picture"))
+	rec = e.do(t, "PUT", base+"/avatar", buf, reqOpts{userID: 2, contentType: ct})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("upload by a member: %d %s", rec.Code, rec.Body.String())
+	}
+	second := decode[domain.RoomAvatar](t, rec)
+
+	gallery := decode[[]domain.RoomAvatar](t, e.do(t, "GET", base+"/avatars", nil, reqOpts{userID: 2}))
+	if len(gallery) != 2 || gallery[0].ID != second.ID || !gallery[0].IsCurrent {
+		t.Fatalf("gallery: %+v", gallery)
 	}
 
-	if err := e.rooms.Join(t.Context(), room.ID, 2); err != nil {
-		t.Fatal(err)
+	rec = e.do(t, "GET", base+"/avatar", nil, reqOpts{userID: 1})
+	if rec.Code != http.StatusOK || rec.Body.String() != "GIF89a-second-picture" {
+		t.Errorf("current picture: %d %q", rec.Code, rec.Body.String())
 	}
+	// the older picture is still reachable by id, which is what the gallery swipes through
+	path := base + "/avatars/" + strconv.FormatInt(first.ID, 10)
 	rec = e.do(t, "GET", path, nil, reqOpts{userID: 2})
 	if rec.Code != http.StatusOK || !bytes.Equal(rec.Body.Bytes(), pngBytes) {
-		t.Fatalf("member download: %d %q", rec.Code, rec.Body.String())
+		t.Errorf("older picture: %d %q", rec.Code, rec.Body.String())
 	}
 
-	// the listing drives the placeholder, so it has to carry the flag too
 	rooms := decode[[]domain.RoomWithProgress](t, e.do(t, "GET", "/api/v1/rooms", nil, reqOpts{userID: 1}))
 	if len(rooms) != 1 || !rooms[0].HasAvatar {
 		t.Errorf("room list lost has_avatar: %+v", rooms)
 	}
 }
 
-func TestRoomAvatarCreatorOnly(t *testing.T) {
+func TestRoomAvatarDeleteRules(t *testing.T) {
 	e := newEnv()
 	room := e.createRoom(t, 1, domain.RoomOpen)
 	if err := e.rooms.Join(t.Context(), room.ID, 2); err != nil {
 		t.Fatal(err)
 	}
-	path := "/api/v1/rooms/" + strconv.FormatInt(room.ID, 10) + "/avatar"
+	if err := e.rooms.Join(t.Context(), room.ID, 3); err != nil {
+		t.Fatal(err)
+	}
+	base := "/api/v1/rooms/" + strconv.FormatInt(room.ID, 10)
 
 	buf, ct := photoForm(t, pngBytes)
-	if rec := e.do(t, "PUT", path, buf, reqOpts{userID: 2, contentType: ct}); rec.Code != http.StatusForbidden {
-		t.Errorf("upload by a plain member: %d, want 403", rec.Code)
-	}
-	if rec := e.do(t, "DELETE", path, nil, reqOpts{userID: 2}); rec.Code != http.StatusForbidden {
-		t.Errorf("delete by a plain member: %d, want 403", rec.Code)
-	}
+	mine := decode[domain.RoomAvatar](t, e.do(t, "PUT", base+"/avatar", buf, reqOpts{userID: 2, contentType: ct}))
+	path := base + "/avatars/" + strconv.FormatInt(mine.ID, 10)
 
-	buf, ct = photoForm(t, []byte("not an image at all"))
-	if rec := e.do(t, "PUT", path, buf, reqOpts{userID: 1, contentType: ct}); rec.Code != http.StatusBadRequest {
-		t.Errorf("non-image upload: %d, want 400", rec.Code)
+	if rec := e.do(t, "DELETE", path, nil, reqOpts{userID: 3}); rec.Code != http.StatusForbidden {
+		t.Errorf("delete by an unrelated member: %d, want 403", rec.Code)
+	}
+	// the room creator moderates, the uploader owns their own picture
+	if rec := e.do(t, "DELETE", path, nil, reqOpts{userID: 1}); rec.Code != http.StatusNoContent {
+		t.Fatalf("delete by the creator: %d %s", rec.Code, rec.Body.String())
+	}
+	if _, ok := e.avatars.objects[mine.ObjectKey]; ok {
+		t.Error("object survived the delete")
+	}
+	if rec := e.do(t, "GET", base+"/avatar", nil, reqOpts{userID: 1}); rec.Code != http.StatusNotFound {
+		t.Errorf("picture after the gallery is emptied: %d, want 404", rec.Code)
 	}
 }
 
-func TestRoomAvatarDeleteClearsTheObject(t *testing.T) {
+func TestRoomAvatarOutsidersAndJunk(t *testing.T) {
 	e := newEnv()
-	room := e.createRoom(t, 1, domain.RoomOpen)
-	path := "/api/v1/rooms/" + strconv.FormatInt(room.ID, 10) + "/avatar"
+	room := e.createRoom(t, 1, domain.RoomInvite)
+	base := "/api/v1/rooms/" + strconv.FormatInt(room.ID, 10)
 
 	buf, ct := photoForm(t, pngBytes)
-	e.do(t, "PUT", path, buf, reqOpts{userID: 1, contentType: ct})
-
-	if rec := e.do(t, "DELETE", path, nil, reqOpts{userID: 1}); rec.Code != http.StatusNoContent {
-		t.Fatalf("delete: %d %s", rec.Code, rec.Body.String())
+	if rec := e.do(t, "PUT", base+"/avatar", buf, reqOpts{userID: 7, contentType: ct}); rec.Code != http.StatusForbidden {
+		t.Errorf("upload by a non-member: %d, want 403", rec.Code)
 	}
-	if _, ok := e.avatars.objects[domain.RoomAvatarKey(room.ID)]; ok {
-		t.Error("object survived the delete")
-	}
-	if rec := e.do(t, "GET", path, nil, reqOpts{userID: 1}); rec.Code != http.StatusNotFound {
-		t.Errorf("picture after delete: %d, want 404", rec.Code)
+	buf, ct = photoForm(t, []byte("not an image at all"))
+	if rec := e.do(t, "PUT", base+"/avatar", buf, reqOpts{userID: 1, contentType: ct}); rec.Code != http.StatusBadRequest {
+		t.Errorf("non-image upload: %d, want 400", rec.Code)
 	}
 }

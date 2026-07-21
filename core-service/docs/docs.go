@@ -1355,14 +1355,14 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Streams the room picture from private object storage. Requires a Bearer token, so browsers must fetch it via XHR rather than a plain \u003cimg src\u003e. Returns 404 when the room has no picture.",
+                "description": "Streams the newest picture of the room from private object storage. Requires a Bearer token, so browsers must fetch it via XHR rather than a plain \u003cimg src\u003e. Returns 404 when the room has no picture.",
                 "produces": [
                     "image/jpeg"
                 ],
                 "tags": [
                     "rooms"
                 ],
-                "summary": "Download a room picture",
+                "summary": "Download the current room picture",
                 "parameters": [
                     {
                         "type": "integer",
@@ -1405,7 +1405,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Room creator only. Send multipart/form-data with a \"photo\" file up to 5 MB. Replaces the previous picture.",
+                "description": "Any room member may add one. Send multipart/form-data with a \"photo\" file up to 5 MB. The new picture becomes the face of the room; the previous ones stay in the gallery.",
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -1415,7 +1415,7 @@ const docTemplate = `{
                 "tags": [
                     "rooms"
                 ],
-                "summary": "Upload a room picture",
+                "summary": "Add a room picture",
                 "parameters": [
                     {
                         "type": "integer",
@@ -1433,10 +1433,10 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "OK",
+                    "201": {
+                        "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/domain.Room"
+                            "$ref": "#/definitions/domain.RoomAvatar"
                         }
                     },
                     "400": {
@@ -1470,6 +1470,138 @@ const docTemplate = `{
                         }
                     }
                 }
+            }
+        },
+        "/rooms/{id}/avatars": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Room members only. Newest first; the first entry is the picture the room currently wears.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rooms"
+                ],
+                "summary": "List the room picture gallery",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "room id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/domain.RoomAvatar"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/rooms/{id}/avatars/{avatarId}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Room members only. Serves an older picture the room used to wear.",
+                "produces": [
+                    "image/jpeg"
+                ],
+                "tags": [
+                    "rooms"
+                ],
+                "summary": "Download one picture from the gallery",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "room id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "picture id",
+                        "name": "avatarId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "file"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    }
+                }
             },
             "delete": {
                 "security": [
@@ -1477,16 +1609,23 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Room creator only. The room keeps its letter placeholder afterwards.",
+                "description": "The member who uploaded it or the room creator. When the current picture goes, the room falls back to the newest one left.",
                 "tags": [
                     "rooms"
                 ],
-                "summary": "Remove a room picture",
+                "summary": "Delete a room picture",
                 "parameters": [
                     {
                         "type": "integer",
                         "description": "room id",
                         "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "picture id",
+                        "name": "avatarId",
                         "in": "path",
                         "required": true
                     }
@@ -2059,6 +2198,23 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "votes_required": {
+                    "type": "integer"
+                }
+            }
+        },
+        "domain.RoomAvatar": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "is_current": {
+                    "type": "boolean"
+                },
+                "uploaded_by": {
                     "type": "integer"
                 }
             }

@@ -4,6 +4,8 @@ package domain
 import (
 	"strconv"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 const (
@@ -50,9 +52,18 @@ type Room struct {
 	HasAvatar bool   `json:"has_avatar"`
 }
 
-// RoomAvatarKey is derived from the room id, so uploading a new picture overwrites the old one.
+// RoomAvatar is one picture in the room gallery. The newest one is what the room wears.
+type RoomAvatar struct {
+	ID         int64     `json:"id"`
+	UploadedBy int64     `json:"uploaded_by"`
+	CreatedAt  time.Time `json:"created_at"`
+	IsCurrent  bool      `json:"is_current"`
+	ObjectKey  string    `json:"-"`
+}
+
+// RoomAvatarKey is unique per upload: replacing a picture must not clobber the older ones.
 func RoomAvatarKey(roomID int64) string {
-	return "rooms/" + strconv.FormatInt(roomID, 10)
+	return "rooms/" + strconv.FormatInt(roomID, 10) + "/" + uuid.NewString()
 }
 
 type RoomWithProgress struct {

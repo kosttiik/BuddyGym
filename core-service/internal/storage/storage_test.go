@@ -316,35 +316,60 @@ func TestRoomsUpdateDelete(t *testing.T) {
 	}
 }
 
-func TestRoomAvatarKeyRoundTrip(t *testing.T) {
+func TestRoomAvatarGallery(t *testing.T) {
 	ctx := context.Background()
 	rooms := storage.NewRooms(pool(t))
 	mustUser(t, 121)
+	mustUser(t, 122)
 	room := mustRoom(t, 121)
-
+	if err := rooms.Join(ctx, room.ID, 122); err != nil {
+		t.Fatal(err)
+	}
 	if room.HasAvatar {
 		t.Fatalf("fresh room reports a picture: %+v", room)
 	}
-	key := domain.RoomAvatarKey(room.ID)
-	if err := rooms.SetAvatar(ctx, room.ID, key); err != nil {
-		t.Fatalf("SetAvatar: %v", err)
+
+	first, err := rooms.AddAvatar(ctx, room.ID, 121, domain.RoomAvatarKey(room.ID))
+	if err != nil {
+		t.Fatalf("AddAvatar: %v", err)
+	}
+	// any member may add one, and the newest upload becomes the face of the room
+	second, err := rooms.AddAvatar(ctx, room.ID, 122, domain.RoomAvatarKey(room.ID))
+	if err != nil {
+		t.Fatalf("AddAvatar by another member: %v", err)
 	}
 
 	stored, err := rooms.Get(ctx, room.ID)
-	if err != nil || stored.AvatarKey != key || !stored.HasAvatar {
+	if err != nil || stored.AvatarKey != second.ObjectKey || !stored.HasAvatar {
 		t.Fatalf("Get: %v, room=%+v", err, stored)
 	}
-	listed, err := rooms.ListByUser(ctx, 121)
-	if err != nil || len(listed) == 0 || !listed[0].HasAvatar {
-		t.Fatalf("ListByUser: %v, rooms=%+v", err, listed)
+	gallery, err := rooms.ListAvatars(ctx, room.ID)
+	if err != nil || len(gallery) != 2 {
+		t.Fatalf("ListAvatars: %v, gallery=%+v", err, gallery)
+	}
+	if gallery[0].ID != second.ID || !gallery[0].IsCurrent || gallery[1].IsCurrent {
+		t.Errorf("gallery order or current flag is off: %+v", gallery)
+	}
+	if gallery[1].UploadedBy != 121 {
+		t.Errorf("uploader lost: %+v", gallery[1])
 	}
 
-	if err := rooms.SetAvatar(ctx, room.ID, ""); err != nil {
-		t.Fatalf("SetAvatar clear: %v", err)
+	// dropping the current picture falls back to the one before it
+	key, err := rooms.DeleteAvatar(ctx, room.ID, second.ID)
+	if err != nil || key != second.ObjectKey {
+		t.Fatalf("DeleteAvatar: %v, key=%q", err, key)
 	}
-	cleared, err := rooms.Get(ctx, room.ID)
-	if err != nil || cleared.HasAvatar {
-		t.Fatalf("Get after clear: %v, room=%+v", err, cleared)
+	back, err := rooms.Get(ctx, room.ID)
+	if err != nil || back.AvatarKey != first.ObjectKey {
+		t.Fatalf("Get after delete: %v, room=%+v", err, back)
+	}
+
+	if _, err := rooms.DeleteAvatar(ctx, room.ID, first.ID); err != nil {
+		t.Fatalf("DeleteAvatar last: %v", err)
+	}
+	empty, err := rooms.Get(ctx, room.ID)
+	if err != nil || empty.HasAvatar {
+		t.Fatalf("Get after the gallery is emptied: %v, room=%+v", err, empty)
 	}
 }
 

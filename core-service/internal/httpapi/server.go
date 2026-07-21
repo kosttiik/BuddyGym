@@ -35,7 +35,10 @@ type RoomsRepo interface {
 	IsMember(ctx context.Context, roomID, userID int64) (bool, error)
 	Join(ctx context.Context, roomID, userID int64) error
 	Leave(ctx context.Context, roomID, userID int64) error
-	SetAvatar(ctx context.Context, roomID int64, key string) error
+	AddAvatar(ctx context.Context, roomID, userID int64, key string) (domain.RoomAvatar, error)
+	ListAvatars(ctx context.Context, roomID int64) ([]domain.RoomAvatar, error)
+	GetAvatar(ctx context.Context, roomID, avatarID int64) (domain.RoomAvatar, error)
+	DeleteAvatar(ctx context.Context, roomID, avatarID int64) (string, error)
 }
 
 type AvatarStore interface {
@@ -188,8 +191,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/v1/rooms/{id}", s.withAuth(s.handleUpdateRoom))
 	mux.HandleFunc("DELETE /api/v1/rooms/{id}", s.withAuth(s.handleDeleteRoom))
 	mux.HandleFunc("GET /api/v1/rooms/{id}/avatar", s.withAuth(s.handleGetRoomAvatar))
-	mux.HandleFunc("PUT /api/v1/rooms/{id}/avatar", s.withAuth(s.handleSetRoomAvatar))
-	mux.HandleFunc("DELETE /api/v1/rooms/{id}/avatar", s.withAuth(s.handleDeleteRoomAvatar))
+	mux.HandleFunc("PUT /api/v1/rooms/{id}/avatar", s.withAuth(s.handleAddRoomAvatar))
+	mux.HandleFunc("GET /api/v1/rooms/{id}/avatars", s.withAuth(s.handleListRoomAvatars))
+	mux.HandleFunc("GET /api/v1/rooms/{id}/avatars/{avatarId}", s.withAuth(s.handleGetRoomAvatarByID))
+	mux.HandleFunc("DELETE /api/v1/rooms/{id}/avatars/{avatarId}", s.withAuth(s.handleDeleteRoomAvatar))
 	mux.HandleFunc("POST /api/v1/rooms/join", s.withAuth(s.handleJoinByCode))
 	mux.HandleFunc("POST /api/v1/rooms/{id}/join", s.withAuth(s.handleJoinRoom))
 	mux.HandleFunc("POST /api/v1/rooms/{id}/leave", s.withAuth(s.handleLeaveRoom))

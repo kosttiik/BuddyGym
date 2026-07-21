@@ -109,17 +109,103 @@ func (r *Rooms) Update(ctx context.Context, room domain.Room) (domain.Room, erro
 		room.ID, room.Name, room.Kind, room.GoalPerPeriod, room.PeriodDays, room.VotesRequired))
 }
 
-// SetAvatar stores the object key of the room picture; an empty key clears it.
-func (r *Rooms) SetAvatar(ctx context.Context, id int64, key string) error {
-	tag, err := r.pool.Exec(ctx,
-		"UPDATE rooms SET avatar_key = $2 WHERE id = $1 AND deleted_at IS NULL", id, key)
+// AddAvatar appends a picture to the room gallery and makes it the current one.
+func (r *Rooms) AddAvatar(ctx context.Context, roomID, userID int64, key string) (domain.RoomAvatar, error) {
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return err
+		return domain.RoomAvatar{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	var added domain.RoomAvatar
+	err = tx.QueryRow(ctx, `
+		INSERT INTO room_avatars (room_id, object_key, uploaded_by)
+		VALUES ($1, $2, $3)
+		RETURNING id, uploaded_by, created_at, object_key`,
+		roomID, key, userID).Scan(&added.ID, &added.UploadedBy, &added.CreatedAt, &added.ObjectKey)
+	if err != nil {
+		return domain.RoomAvatar{}, err
+	}
+
+	tag, err := tx.Exec(ctx,
+		"UPDATE rooms SET avatar_key = $2 WHERE id = $1 AND deleted_at IS NULL", roomID, key)
+	if err != nil {
+		return domain.RoomAvatar{}, err
 	}
 	if tag.RowsAffected() == 0 {
-		return ErrNotFound
+		return domain.RoomAvatar{}, ErrNotFound
 	}
-	return nil
+
+	added.IsCurrent = true
+	return added, tx.Commit(ctx)
+}
+
+// ListAvatars returns the gallery, newest first.
+func (r *Rooms) ListAvatars(ctx context.Context, roomID int64) ([]domain.RoomAvatar, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT a.id, a.uploaded_by, a.created_at, a.object_key,
+		       a.object_key = (SELECT avatar_key FROM rooms WHERE id = a.room_id)
+		FROM room_avatars a
+		WHERE a.room_id = $1
+		ORDER BY a.created_at DESC, a.id DESC`, roomID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []domain.RoomAvatar
+	for rows.Next() {
+		var a domain.RoomAvatar
+		if err := rows.Scan(&a.ID, &a.UploadedBy, &a.CreatedAt, &a.ObjectKey, &a.IsCurrent); err != nil {
+			return nil, err
+		}
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+func (r *Rooms) GetAvatar(ctx context.Context, roomID, avatarID int64) (domain.RoomAvatar, error) {
+	var a domain.RoomAvatar
+	err := r.pool.QueryRow(ctx, `
+		SELECT id, uploaded_by, created_at, object_key
+		FROM room_avatars WHERE room_id = $1 AND id = $2`, roomID, avatarID).
+		Scan(&a.ID, &a.UploadedBy, &a.CreatedAt, &a.ObjectKey)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.RoomAvatar{}, ErrNotFound
+	}
+	return a, err
+}
+
+// DeleteAvatar drops one picture and, when it was the current one, falls back to the newest
+// picture left. It returns the object key so the caller can erase the bytes.
+func (r *Rooms) DeleteAvatar(ctx context.Context, roomID, avatarID int64) (string, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback(ctx)
+
+	var key string
+	err = tx.QueryRow(ctx,
+		"DELETE FROM room_avatars WHERE room_id = $1 AND id = $2 RETURNING object_key",
+		roomID, avatarID).Scan(&key)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	if err != nil {
+		return "", err
+	}
+
+	if _, err := tx.Exec(ctx, `
+		UPDATE rooms SET avatar_key = COALESCE((
+			SELECT object_key FROM room_avatars
+			WHERE room_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1
+		), '')
+		WHERE id = $1 AND avatar_key = $2`, roomID, key); err != nil {
+		return "", err
+	}
+
+	return key, tx.Commit(ctx)
 }
 
 func (r *Rooms) Delete(ctx context.Context, id int64) error {

@@ -3,35 +3,42 @@ package httpapi
 import (
 	"io"
 	"net/http"
+	"strconv"
 
 	"github.com/kosttiik/BuddyGym/core-service/internal/domain"
 )
 
 const maxRoomAvatar = 5 << 20
 
-// roomAdmin loads the room and refuses everyone but its creator.
-func (s *Server) roomAdmin(w http.ResponseWriter, r *http.Request) (domain.Room, bool) {
-	id, ok := roomID(r)
-	if !ok {
-		writeErr(w, http.StatusBadRequest, "invalid room id")
-		return domain.Room{}, false
-	}
-	room, err := s.rooms.Get(r.Context(), id)
+func roomAvatarID(r *http.Request) (int64, bool) {
+	id, err := strconv.ParseInt(r.PathValue("avatarId"), 10, 64)
+	return id, err == nil && id > 0
+}
+
+func (s *Server) streamAvatar(w http.ResponseWriter, r *http.Request, key string, roomID int64) {
+	body, contentType, err := s.avatars.Open(r.Context(), key)
 	if err != nil {
 		s.mapError(w, err)
-		return domain.Room{}, false
+		return
 	}
-	if room.CreatorID != userFrom(r.Context()).ID {
-		writeErr(w, http.StatusForbidden, "room creator only")
-		return domain.Room{}, false
+	defer body.Close()
+
+	if !allowedAvatarTypes[contentType] {
+		contentType = "application/octet-stream"
 	}
-	return room, true
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	// every upload gets its own key, so a picture is immutable once stored
+	w.Header().Set("Cache-Control", "private, max-age=3600")
+	if _, err := io.Copy(w, body); err != nil {
+		s.log.Error("streaming room avatar failed", "room_id", roomID, "err", err)
+	}
 }
 
 // handleGetRoomAvatar godoc
 //
-//	@Summary		Download a room picture
-//	@Description	Streams the room picture from private object storage. Requires a Bearer token, so browsers must fetch it via XHR rather than a plain <img src>. Returns 404 when the room has no picture.
+//	@Summary		Download the current room picture
+//	@Description	Streams the newest picture of the room from private object storage. Requires a Bearer token, so browsers must fetch it via XHR rather than a plain <img src>. Returns 404 when the room has no picture.
 //	@Tags			rooms
 //	@Security		BearerAuth
 //	@Produce		image/jpeg
@@ -56,45 +63,96 @@ func (s *Server) handleGetRoomAvatar(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "room has no picture")
 		return
 	}
+	s.streamAvatar(w, r, room.AvatarKey, room.ID)
+}
 
-	body, contentType, err := s.avatars.Open(r.Context(), room.AvatarKey)
+// handleListRoomAvatars godoc
+//
+//	@Summary		List the room picture gallery
+//	@Description	Room members only. Newest first; the first entry is the picture the room currently wears.
+//	@Tags			rooms
+//	@Security		BearerAuth
+//	@Produce		json
+//	@Param			id	path		int	true	"room id"
+//	@Success		200	{array}		domain.RoomAvatar
+//	@Failure		400	{object}	ErrorResponse
+//	@Failure		401	{object}	ErrorResponse
+//	@Failure		403	{object}	ErrorResponse
+//	@Failure		404	{object}	ErrorResponse
+//	@Failure		500	{object}	ErrorResponse
+//	@Router			/rooms/{id}/avatars [get]
+func (s *Server) handleListRoomAvatars(w http.ResponseWriter, r *http.Request) {
+	room, ok := s.membership(w, r)
+	if !ok {
+		return
+	}
+	avatars, err := s.rooms.ListAvatars(r.Context(), room.ID)
+	if err != nil {
+		s.internal(w, err)
+		return
+	}
+	if avatars == nil {
+		avatars = []domain.RoomAvatar{}
+	}
+	writeJSON(w, http.StatusOK, avatars)
+}
+
+// handleGetRoomAvatarByID godoc
+//
+//	@Summary		Download one picture from the gallery
+//	@Description	Room members only. Serves an older picture the room used to wear.
+//	@Tags			rooms
+//	@Security		BearerAuth
+//	@Produce		image/jpeg
+//	@Param			id			path		int	true	"room id"
+//	@Param			avatarId	path		int	true	"picture id"
+//	@Success		200			{file}		binary
+//	@Failure		400			{object}	ErrorResponse
+//	@Failure		401			{object}	ErrorResponse
+//	@Failure		403			{object}	ErrorResponse
+//	@Failure		404			{object}	ErrorResponse
+//	@Router			/rooms/{id}/avatars/{avatarId} [get]
+func (s *Server) handleGetRoomAvatarByID(w http.ResponseWriter, r *http.Request) {
+	room, ok := s.membership(w, r)
+	if !ok {
+		return
+	}
+	avatarID, ok := roomAvatarID(r)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "invalid picture id")
+		return
+	}
+	avatar, err := s.rooms.GetAvatar(r.Context(), room.ID, avatarID)
 	if err != nil {
 		s.mapError(w, err)
 		return
 	}
-	defer body.Close()
-
-	if !allowedAvatarTypes[contentType] {
-		contentType = "application/octet-stream"
+	if s.avatars == nil {
+		writeErr(w, http.StatusNotFound, "room has no picture")
+		return
 	}
-	w.Header().Set("Content-Type", contentType)
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	// the key is derived from the room id, so a replaced picture reuses it
-	w.Header().Set("Cache-Control", "private, max-age=60")
-	if _, err := io.Copy(w, body); err != nil {
-		s.log.Error("streaming room avatar failed", "room_id", id, "err", err)
-	}
+	s.streamAvatar(w, r, avatar.ObjectKey, room.ID)
 }
 
-// handleSetRoomAvatar godoc
+// handleAddRoomAvatar godoc
 //
-//	@Summary		Upload a room picture
-//	@Description	Room creator only. Send multipart/form-data with a "photo" file up to 5 MB. Replaces the previous picture.
+//	@Summary		Add a room picture
+//	@Description	Any room member may add one. Send multipart/form-data with a "photo" file up to 5 MB. The new picture becomes the face of the room; the previous ones stay in the gallery.
 //	@Tags			rooms
 //	@Security		BearerAuth
 //	@Accept			multipart/form-data
 //	@Produce		json
 //	@Param			id		path		int		true	"room id"
 //	@Param			photo	formData	file	true	"room picture"
-//	@Success		200		{object}	domain.Room
+//	@Success		201		{object}	domain.RoomAvatar
 //	@Failure		400		{object}	ErrorResponse
 //	@Failure		401		{object}	ErrorResponse
 //	@Failure		403		{object}	ErrorResponse
 //	@Failure		404		{object}	ErrorResponse
 //	@Failure		500		{object}	ErrorResponse
 //	@Router			/rooms/{id}/avatar [put]
-func (s *Server) handleSetRoomAvatar(w http.ResponseWriter, r *http.Request) {
-	room, ok := s.roomAdmin(w, r)
+func (s *Server) handleAddRoomAvatar(w http.ResponseWriter, r *http.Request) {
+	room, ok := s.membership(w, r)
 	if !ok {
 		return
 	}
@@ -136,45 +194,61 @@ func (s *Server) handleSetRoomAvatar(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, err)
 		return
 	}
-	if err := s.rooms.SetAvatar(r.Context(), room.ID, key); err != nil {
+	added, err := s.rooms.AddAvatar(r.Context(), room.ID, userFrom(r.Context()).ID, key)
+	if err != nil {
+		// the row is what makes the picture reachable, so a lost race only leaks bytes
+		if delErr := s.avatars.Delete(r.Context(), key); delErr != nil {
+			s.log.Error("dropping orphan room avatar failed", "room_id", room.ID, "err", delErr)
+		}
 		s.mapError(w, err)
 		return
 	}
-	room.AvatarKey = key
-	room.HasAvatar = true
-	writeJSON(w, http.StatusOK, room)
+	writeJSON(w, http.StatusCreated, added)
 }
 
 // handleDeleteRoomAvatar godoc
 //
-//	@Summary		Remove a room picture
-//	@Description	Room creator only. The room keeps its letter placeholder afterwards.
+//	@Summary		Delete a room picture
+//	@Description	The member who uploaded it or the room creator. When the current picture goes, the room falls back to the newest one left.
 //	@Tags			rooms
 //	@Security		BearerAuth
-//	@Param			id	path	int	true	"room id"
+//	@Param			id			path	int	true	"room id"
+//	@Param			avatarId	path	int	true	"picture id"
 //	@Success		204
 //	@Failure		400	{object}	ErrorResponse
 //	@Failure		401	{object}	ErrorResponse
 //	@Failure		403	{object}	ErrorResponse
 //	@Failure		404	{object}	ErrorResponse
 //	@Failure		500	{object}	ErrorResponse
-//	@Router			/rooms/{id}/avatar [delete]
+//	@Router			/rooms/{id}/avatars/{avatarId} [delete]
 func (s *Server) handleDeleteRoomAvatar(w http.ResponseWriter, r *http.Request) {
-	room, ok := s.roomAdmin(w, r)
+	room, ok := s.membership(w, r)
 	if !ok {
 		return
 	}
-	if room.AvatarKey == "" {
-		w.WriteHeader(http.StatusNoContent)
+	avatarID, ok := roomAvatarID(r)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, "invalid picture id")
 		return
 	}
-	if err := s.rooms.SetAvatar(r.Context(), room.ID, ""); err != nil {
+	avatar, err := s.rooms.GetAvatar(r.Context(), room.ID, avatarID)
+	if err != nil {
 		s.mapError(w, err)
 		return
 	}
-	// the row is what makes the picture reachable, so a failed object delete only leaks bytes
+	user := userFrom(r.Context()).ID
+	if avatar.UploadedBy != user && room.CreatorID != user {
+		writeErr(w, http.StatusForbidden, "uploader or room creator only")
+		return
+	}
+
+	key, err := s.rooms.DeleteAvatar(r.Context(), room.ID, avatarID)
+	if err != nil {
+		s.mapError(w, err)
+		return
+	}
 	if s.avatars != nil {
-		if err := s.avatars.Delete(r.Context(), room.AvatarKey); err != nil {
+		if err := s.avatars.Delete(r.Context(), key); err != nil {
 			s.log.Error("deleting room avatar object failed", "room_id", room.ID, "err", err)
 		}
 	}

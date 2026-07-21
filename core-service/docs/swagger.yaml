@@ -150,6 +150,17 @@ definitions:
       votes_required:
         type: integer
     type: object
+  domain.RoomAvatar:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: integer
+      is_current:
+        type: boolean
+      uploaded_by:
+        type: integer
+    type: object
   domain.RoomWithProgress:
     properties:
       created_at:
@@ -1229,46 +1240,10 @@ paths:
       tags:
       - rooms
   /rooms/{id}/avatar:
-    delete:
-      description: Room creator only. The room keeps its letter placeholder afterwards.
-      parameters:
-      - description: room id
-        in: path
-        name: id
-        required: true
-        type: integer
-      responses:
-        "204":
-          description: No Content
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/httpapi.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/httpapi.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/httpapi.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/httpapi.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/httpapi.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Remove a room picture
-      tags:
-      - rooms
     get:
-      description: Streams the room picture from private object storage. Requires
-        a Bearer token, so browsers must fetch it via XHR rather than a plain <img
-        src>. Returns 404 when the room has no picture.
+      description: Streams the newest picture of the room from private object storage.
+        Requires a Bearer token, so browsers must fetch it via XHR rather than a plain
+        <img src>. Returns 404 when the room has no picture.
       parameters:
       - description: room id
         in: path
@@ -1296,14 +1271,15 @@ paths:
             $ref: '#/definitions/httpapi.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Download a room picture
+      summary: Download the current room picture
       tags:
       - rooms
     put:
       consumes:
       - multipart/form-data
-      description: Room creator only. Send multipart/form-data with a "photo" file
-        up to 5 MB. Replaces the previous picture.
+      description: Any room member may add one. Send multipart/form-data with a "photo"
+        file up to 5 MB. The new picture becomes the face of the room; the previous
+        ones stay in the gallery.
       parameters:
       - description: room id
         in: path
@@ -1318,10 +1294,10 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
-          description: OK
+        "201":
+          description: Created
           schema:
-            $ref: '#/definitions/domain.Room'
+            $ref: '#/definitions/domain.RoomAvatar'
         "400":
           description: Bad Request
           schema:
@@ -1344,7 +1320,135 @@ paths:
             $ref: '#/definitions/httpapi.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: Upload a room picture
+      summary: Add a room picture
+      tags:
+      - rooms
+  /rooms/{id}/avatars:
+    get:
+      description: Room members only. Newest first; the first entry is the picture
+        the room currently wears.
+      parameters:
+      - description: room id
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/domain.RoomAvatar'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List the room picture gallery
+      tags:
+      - rooms
+  /rooms/{id}/avatars/{avatarId}:
+    delete:
+      description: The member who uploaded it or the room creator. When the current
+        picture goes, the room falls back to the newest one left.
+      parameters:
+      - description: room id
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: picture id
+        in: path
+        name: avatarId
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete a room picture
+      tags:
+      - rooms
+    get:
+      description: Room members only. Serves an older picture the room used to wear.
+      parameters:
+      - description: room id
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: picture id
+        in: path
+        name: avatarId
+        required: true
+        type: integer
+      produces:
+      - image/jpeg
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Download one picture from the gallery
       tags:
       - rooms
   /rooms/{id}/checkins:

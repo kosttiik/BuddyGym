@@ -321,10 +321,12 @@ func (f *fakeObjects) Delete(_ context.Context, key string) error {
 }
 
 type fakeRooms struct {
-	rooms       map[int64]domain.Room
-	members     map[int64]map[int64]time.Time
-	commentRoom map[int64]int64
-	nextID      int64
+	rooms        map[int64]domain.Room
+	members      map[int64]map[int64]time.Time
+	commentRoom  map[int64]int64
+	avatars      map[int64][]domain.RoomAvatar
+	nextID       int64
+	nextAvatarID int64
 }
 
 func newFakeRooms() *fakeRooms {
@@ -332,6 +334,7 @@ func newFakeRooms() *fakeRooms {
 		rooms:       map[int64]domain.Room{},
 		members:     map[int64]map[int64]time.Time{},
 		commentRoom: map[int64]int64{},
+		avatars:     map[int64][]domain.RoomAvatar{},
 	}
 }
 
@@ -379,15 +382,62 @@ func (f *fakeRooms) Delete(_ context.Context, id int64) error {
 	return nil
 }
 
-func (f *fakeRooms) SetAvatar(_ context.Context, id int64, key string) error {
-	room, ok := f.rooms[id]
+func (f *fakeRooms) AddAvatar(_ context.Context, roomID, userID int64, key string) (domain.RoomAvatar, error) {
+	room, ok := f.rooms[roomID]
 	if !ok {
-		return storage.ErrNotFound
+		return domain.RoomAvatar{}, storage.ErrNotFound
 	}
-	room.AvatarKey = key
-	room.HasAvatar = key != ""
-	f.rooms[id] = room
-	return nil
+	f.nextAvatarID++
+	added := domain.RoomAvatar{
+		ID:         f.nextAvatarID,
+		UploadedBy: userID,
+		CreatedAt:  time.Now(),
+		IsCurrent:  true,
+		ObjectKey:  key,
+	}
+	f.avatars[roomID] = append([]domain.RoomAvatar{added}, f.avatars[roomID]...)
+	room.AvatarKey, room.HasAvatar = key, true
+	f.rooms[roomID] = room
+	return added, nil
+}
+
+func (f *fakeRooms) ListAvatars(_ context.Context, roomID int64) ([]domain.RoomAvatar, error) {
+	out := make([]domain.RoomAvatar, 0, len(f.avatars[roomID]))
+	for _, a := range f.avatars[roomID] {
+		a.IsCurrent = a.ObjectKey == f.rooms[roomID].AvatarKey
+		out = append(out, a)
+	}
+	return out, nil
+}
+
+func (f *fakeRooms) GetAvatar(_ context.Context, roomID, avatarID int64) (domain.RoomAvatar, error) {
+	for _, a := range f.avatars[roomID] {
+		if a.ID == avatarID {
+			return a, nil
+		}
+	}
+	return domain.RoomAvatar{}, storage.ErrNotFound
+}
+
+func (f *fakeRooms) DeleteAvatar(_ context.Context, roomID, avatarID int64) (string, error) {
+	list := f.avatars[roomID]
+	for i, a := range list {
+		if a.ID != avatarID {
+			continue
+		}
+		f.avatars[roomID] = append(append([]domain.RoomAvatar{}, list[:i]...), list[i+1:]...)
+		room := f.rooms[roomID]
+		if room.AvatarKey == a.ObjectKey {
+			room.AvatarKey = ""
+			if left := f.avatars[roomID]; len(left) > 0 {
+				room.AvatarKey = left[0].ObjectKey
+			}
+			room.HasAvatar = room.AvatarKey != ""
+			f.rooms[roomID] = room
+		}
+		return a.ObjectKey, nil
+	}
+	return "", storage.ErrNotFound
 }
 
 func (f *fakeRooms) ListByUser(_ context.Context, userID int64) ([]domain.RoomWithProgress, error) {
