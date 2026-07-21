@@ -1,7 +1,10 @@
 // Package domain holds core entities and reward rules.
 package domain
 
-import "time"
+import (
+	"strconv"
+	"time"
+)
 
 const (
 	RoomOpen   = "open"
@@ -42,6 +45,14 @@ type Room struct {
 	VotesRequired int       `json:"votes_required"`
 	CreatorID     int64     `json:"creator_id"`
 	CreatedAt     time.Time `json:"created_at"`
+	// the object key stays server side; clients only learn whether there is a picture to fetch
+	AvatarKey string `json:"-"`
+	HasAvatar bool   `json:"has_avatar"`
+}
+
+// RoomAvatarKey is derived from the room id, so uploading a new picture overwrites the old one.
+func RoomAvatarKey(roomID int64) string {
+	return "rooms/" + strconv.FormatInt(roomID, 10)
 }
 
 type RoomWithProgress struct {

@@ -35,10 +35,13 @@ type RoomsRepo interface {
 	IsMember(ctx context.Context, roomID, userID int64) (bool, error)
 	Join(ctx context.Context, roomID, userID int64) error
 	Leave(ctx context.Context, roomID, userID int64) error
+	SetAvatar(ctx context.Context, roomID int64, key string) error
 }
 
 type AvatarStore interface {
 	Open(ctx context.Context, key string) (io.ReadCloser, string, error)
+	Put(ctx context.Context, key string, data []byte) error
+	Delete(ctx context.Context, key string) error
 }
 
 // AvatarMirror refreshes a mirrored avatar when Telegram reports a new photo_url.
@@ -184,6 +187,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/rooms/{id}", s.withAuth(s.handleGetRoom))
 	mux.HandleFunc("PATCH /api/v1/rooms/{id}", s.withAuth(s.handleUpdateRoom))
 	mux.HandleFunc("DELETE /api/v1/rooms/{id}", s.withAuth(s.handleDeleteRoom))
+	mux.HandleFunc("GET /api/v1/rooms/{id}/avatar", s.withAuth(s.handleGetRoomAvatar))
+	mux.HandleFunc("PUT /api/v1/rooms/{id}/avatar", s.withAuth(s.handleSetRoomAvatar))
+	mux.HandleFunc("DELETE /api/v1/rooms/{id}/avatar", s.withAuth(s.handleDeleteRoomAvatar))
 	mux.HandleFunc("POST /api/v1/rooms/join", s.withAuth(s.handleJoinByCode))
 	mux.HandleFunc("POST /api/v1/rooms/{id}/join", s.withAuth(s.handleJoinRoom))
 	mux.HandleFunc("POST /api/v1/rooms/{id}/leave", s.withAuth(s.handleLeaveRoom))

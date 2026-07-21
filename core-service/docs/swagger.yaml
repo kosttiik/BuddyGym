@@ -135,6 +135,8 @@ definitions:
         type: integer
       goal_per_period:
         type: integer
+      has_avatar:
+        type: boolean
       id:
         type: integer
       invite_code:
@@ -156,6 +158,8 @@ definitions:
         type: integer
       goal_per_period:
         type: integer
+      has_avatar:
+        type: boolean
       id:
         type: integer
       invite_code:
@@ -1222,6 +1226,125 @@ paths:
       security:
       - BearerAuth: []
       summary: Update a room
+      tags:
+      - rooms
+  /rooms/{id}/avatar:
+    delete:
+      description: Room creator only. The room keeps its letter placeholder afterwards.
+      parameters:
+      - description: room id
+        in: path
+        name: id
+        required: true
+        type: integer
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Remove a room picture
+      tags:
+      - rooms
+    get:
+      description: Streams the room picture from private object storage. Requires
+        a Bearer token, so browsers must fetch it via XHR rather than a plain <img
+        src>. Returns 404 when the room has no picture.
+      parameters:
+      - description: room id
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - image/jpeg
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Download a room picture
+      tags:
+      - rooms
+    put:
+      consumes:
+      - multipart/form-data
+      description: Room creator only. Send multipart/form-data with a "photo" file
+        up to 5 MB. Replaces the previous picture.
+      parameters:
+      - description: room id
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: room picture
+        in: formData
+        name: photo
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/domain.Room'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Upload a room picture
       tags:
       - rooms
   /rooms/{id}/checkins:

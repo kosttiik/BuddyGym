@@ -20,7 +20,7 @@ func NewRooms(pool *pgxpool.Pool) *Rooms {
 	return &Rooms{pool: pool}
 }
 
-const roomColumns = "id, name, kind, invite_code, goal_per_period, period_days, votes_required, creator_id, created_at"
+const roomColumns = "id, name, kind, invite_code, goal_per_period, period_days, votes_required, creator_id, created_at, avatar_key"
 
 // Periods are a fixed grid anchored on the day the member joined, the same grid
 // domain.RoomStreak walks. memberships.period_start only moves when a checkin lands, so
@@ -43,10 +43,11 @@ const periodEndsAt = `((` + periodStartDate + ` + r.period_days)::timestamptz)`
 func scanRoom(row pgx.Row) (domain.Room, error) {
 	var rm domain.Room
 	err := row.Scan(&rm.ID, &rm.Name, &rm.Kind, &rm.InviteCode, &rm.GoalPerPeriod,
-		&rm.PeriodDays, &rm.VotesRequired, &rm.CreatorID, &rm.CreatedAt)
+		&rm.PeriodDays, &rm.VotesRequired, &rm.CreatorID, &rm.CreatedAt, &rm.AvatarKey)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Room{}, ErrNotFound
 	}
+	rm.HasAvatar = rm.AvatarKey != ""
 	return rm, err
 }
 
@@ -108,6 +109,19 @@ func (r *Rooms) Update(ctx context.Context, room domain.Room) (domain.Room, erro
 		room.ID, room.Name, room.Kind, room.GoalPerPeriod, room.PeriodDays, room.VotesRequired))
 }
 
+// SetAvatar stores the object key of the room picture; an empty key clears it.
+func (r *Rooms) SetAvatar(ctx context.Context, id int64, key string) error {
+	tag, err := r.pool.Exec(ctx,
+		"UPDATE rooms SET avatar_key = $2 WHERE id = $1 AND deleted_at IS NULL", id, key)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (r *Rooms) Delete(ctx context.Context, id int64) error {
 	tag, err := r.pool.Exec(ctx, "DELETE FROM rooms WHERE id = $1", id)
 	if err != nil {
@@ -137,10 +151,11 @@ func (r *Rooms) ListByUser(ctx context.Context, userID int64) ([]domain.RoomWith
 	for rows.Next() {
 		var rp domain.RoomWithProgress
 		if err := rows.Scan(&rp.ID, &rp.Name, &rp.Kind, &rp.InviteCode, &rp.GoalPerPeriod,
-			&rp.PeriodDays, &rp.VotesRequired, &rp.CreatorID, &rp.CreatedAt,
+			&rp.PeriodDays, &rp.VotesRequired, &rp.CreatorID, &rp.CreatedAt, &rp.AvatarKey,
 			&rp.WorkoutsCount, &rp.MembersCount, &rp.PeriodEndsAt); err != nil {
 			return nil, err
 		}
+		rp.HasAvatar = rp.AvatarKey != ""
 		out = append(out, rp)
 	}
 	return out, rows.Err()
@@ -165,9 +180,11 @@ func (r *Rooms) ListOpen(ctx context.Context, userID int64) ([]domain.Room, erro
 	for rows.Next() {
 		var room domain.Room
 		if err := rows.Scan(&room.ID, &room.Name, &room.Kind, &room.InviteCode, &room.GoalPerPeriod,
-			&room.PeriodDays, &room.VotesRequired, &room.CreatorID, &room.CreatedAt); err != nil {
+			&room.PeriodDays, &room.VotesRequired, &room.CreatorID, &room.CreatedAt,
+			&room.AvatarKey); err != nil {
 			return nil, err
 		}
+		room.HasAvatar = room.AvatarKey != ""
 		room.InviteCode = ""
 		out = append(out, room)
 	}

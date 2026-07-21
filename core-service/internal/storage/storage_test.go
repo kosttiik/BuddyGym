@@ -316,6 +316,38 @@ func TestRoomsUpdateDelete(t *testing.T) {
 	}
 }
 
+func TestRoomAvatarKeyRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	rooms := storage.NewRooms(pool(t))
+	mustUser(t, 121)
+	room := mustRoom(t, 121)
+
+	if room.HasAvatar {
+		t.Fatalf("fresh room reports a picture: %+v", room)
+	}
+	key := domain.RoomAvatarKey(room.ID)
+	if err := rooms.SetAvatar(ctx, room.ID, key); err != nil {
+		t.Fatalf("SetAvatar: %v", err)
+	}
+
+	stored, err := rooms.Get(ctx, room.ID)
+	if err != nil || stored.AvatarKey != key || !stored.HasAvatar {
+		t.Fatalf("Get: %v, room=%+v", err, stored)
+	}
+	listed, err := rooms.ListByUser(ctx, 121)
+	if err != nil || len(listed) == 0 || !listed[0].HasAvatar {
+		t.Fatalf("ListByUser: %v, rooms=%+v", err, listed)
+	}
+
+	if err := rooms.SetAvatar(ctx, room.ID, ""); err != nil {
+		t.Fatalf("SetAvatar clear: %v", err)
+	}
+	cleared, err := rooms.Get(ctx, room.ID)
+	if err != nil || cleared.HasAvatar {
+		t.Fatalf("Get after clear: %v, room=%+v", err, cleared)
+	}
+}
+
 func TestResultsApplyIdempotent(t *testing.T) {
 	ctx := context.Background()
 	results := storage.NewResults(pool(t))

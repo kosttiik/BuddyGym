@@ -142,6 +142,16 @@ func (f *fakeAvatars) Open(_ context.Context, key string) (io.ReadCloser, string
 	return io.NopCloser(bytes.NewReader(data)), "image/jpeg", nil
 }
 
+func (f *fakeAvatars) Put(_ context.Context, key string, data []byte) error {
+	f.objects[key] = data
+	return nil
+}
+
+func (f *fakeAvatars) Delete(_ context.Context, key string) error {
+	delete(f.objects, key)
+	return nil
+}
+
 type fakeBuddies struct {
 	tagged map[string][]int64
 	users  *fakeUsers
@@ -366,6 +376,17 @@ func (f *fakeRooms) Delete(_ context.Context, id int64) error {
 	}
 	delete(f.rooms, id)
 	delete(f.members, id)
+	return nil
+}
+
+func (f *fakeRooms) SetAvatar(_ context.Context, id int64, key string) error {
+	room, ok := f.rooms[id]
+	if !ok {
+		return storage.ErrNotFound
+	}
+	room.AvatarKey = key
+	room.HasAvatar = key != ""
+	f.rooms[id] = room
 	return nil
 }
 

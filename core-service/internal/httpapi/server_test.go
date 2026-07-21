@@ -1032,3 +1032,79 @@ func TestCommentWithPhoto(t *testing.T) {
 		t.Errorf("objects left behind: %v", e.commentPhotos.objects)
 	}
 }
+
+// A room picture is uploaded by the creator and served back to any member.
+func TestRoomAvatarUploadAndDownload(t *testing.T) {
+	e := newEnv()
+	room := e.createRoom(t, 1, domain.RoomOpen)
+	path := "/api/v1/rooms/" + strconv.FormatInt(room.ID, 10) + "/avatar"
+
+	rec := e.do(t, "GET", path, nil, reqOpts{userID: 1})
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("picture before upload: %d, want 404", rec.Code)
+	}
+
+	buf, ct := photoForm(t, pngBytes)
+	rec = e.do(t, "PUT", path, buf, reqOpts{userID: 1, contentType: ct})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("upload: %d %s", rec.Code, rec.Body.String())
+	}
+	if updated := decode[domain.Room](t, rec); !updated.HasAvatar {
+		t.Error("uploaded room reports has_avatar = false")
+	}
+
+	if err := e.rooms.Join(t.Context(), room.ID, 2); err != nil {
+		t.Fatal(err)
+	}
+	rec = e.do(t, "GET", path, nil, reqOpts{userID: 2})
+	if rec.Code != http.StatusOK || !bytes.Equal(rec.Body.Bytes(), pngBytes) {
+		t.Fatalf("member download: %d %q", rec.Code, rec.Body.String())
+	}
+
+	// the listing drives the placeholder, so it has to carry the flag too
+	rooms := decode[[]domain.RoomWithProgress](t, e.do(t, "GET", "/api/v1/rooms", nil, reqOpts{userID: 1}))
+	if len(rooms) != 1 || !rooms[0].HasAvatar {
+		t.Errorf("room list lost has_avatar: %+v", rooms)
+	}
+}
+
+func TestRoomAvatarCreatorOnly(t *testing.T) {
+	e := newEnv()
+	room := e.createRoom(t, 1, domain.RoomOpen)
+	if err := e.rooms.Join(t.Context(), room.ID, 2); err != nil {
+		t.Fatal(err)
+	}
+	path := "/api/v1/rooms/" + strconv.FormatInt(room.ID, 10) + "/avatar"
+
+	buf, ct := photoForm(t, pngBytes)
+	if rec := e.do(t, "PUT", path, buf, reqOpts{userID: 2, contentType: ct}); rec.Code != http.StatusForbidden {
+		t.Errorf("upload by a plain member: %d, want 403", rec.Code)
+	}
+	if rec := e.do(t, "DELETE", path, nil, reqOpts{userID: 2}); rec.Code != http.StatusForbidden {
+		t.Errorf("delete by a plain member: %d, want 403", rec.Code)
+	}
+
+	buf, ct = photoForm(t, []byte("not an image at all"))
+	if rec := e.do(t, "PUT", path, buf, reqOpts{userID: 1, contentType: ct}); rec.Code != http.StatusBadRequest {
+		t.Errorf("non-image upload: %d, want 400", rec.Code)
+	}
+}
+
+func TestRoomAvatarDeleteClearsTheObject(t *testing.T) {
+	e := newEnv()
+	room := e.createRoom(t, 1, domain.RoomOpen)
+	path := "/api/v1/rooms/" + strconv.FormatInt(room.ID, 10) + "/avatar"
+
+	buf, ct := photoForm(t, pngBytes)
+	e.do(t, "PUT", path, buf, reqOpts{userID: 1, contentType: ct})
+
+	if rec := e.do(t, "DELETE", path, nil, reqOpts{userID: 1}); rec.Code != http.StatusNoContent {
+		t.Fatalf("delete: %d %s", rec.Code, rec.Body.String())
+	}
+	if _, ok := e.avatars.objects[domain.RoomAvatarKey(room.ID)]; ok {
+		t.Error("object survived the delete")
+	}
+	if rec := e.do(t, "GET", path, nil, reqOpts{userID: 1}); rec.Code != http.StatusNotFound {
+		t.Errorf("picture after delete: %d, want 404", rec.Code)
+	}
+}
