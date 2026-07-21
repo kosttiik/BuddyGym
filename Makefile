@@ -1,6 +1,7 @@
 PROTO_DIR := proto
 PROTO_FILES := $(shell find $(PROTO_DIR) -name '*.proto')
 CORE_DIR := core-service
+CHECKIN_DIR := ../BuddyGym-CheckIn
 
 .PHONY: proto proto-py swagger build test vet run up down
 
@@ -11,7 +12,7 @@ proto:
 		$(PROTO_FILES)
 
 proto-py:
-	cd checkin-service && $(MAKE) proto-py
+	cd $(CHECKIN_DIR) && $(MAKE) proto-py
 
 # swag version is pinned by core-service/go.mod
 swagger:

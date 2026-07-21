@@ -34,12 +34,10 @@ flowchart TB
 The three repositories are cloned side by side. Compose and proto generation rely on these paths.
 
 ```text
-BuddyGym/
-├── core-service/     Go (this repository)
-├── checkin-service/  Python (separate repository)
-├── frontend/         Telegram Mini App (separate repository)
-├── proto/            shared gRPC contracts
-└── docker-compose.yml
+BuddyGym-project/
+├── BuddyGym/         Go + compose + shared proto
+├── BuddyGym-CheckIn/  Python (separate repository)
+└── BuddyGym-Frontend/ Telegram Mini App (separate repository)
 ```
 
 ## Check-ins and photos
@@ -57,7 +55,7 @@ Photos are private end to end:
 ## Quick start
 
 ```bash
-cp .env.example .env   # set BOT_TOKEN and JWT_SECRET
+cp .env.example .env   # set BOT_TOKEN, JWT_SECRET and GEOAPIFY_API_KEY
 docker compose up -d --build
 curl localhost:8080/api/v1/health
 ```

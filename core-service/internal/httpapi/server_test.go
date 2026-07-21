@@ -560,13 +560,13 @@ func TestCreateCheckinGeo(t *testing.T) {
 	room := e.createRoom(t, 1, domain.RoomOpen)
 
 	rec := e.do(t, "POST", "/api/v1/checkins", httpapi.CreateCheckinGeoRequest{
-		RoomIDs: []int64{room.ID}, Geo: checkin.Geo{Lat: 55.75, Lon: 37.61},
+		RoomIDs: []int64{room.ID}, Geo: checkin.Geo{Lat: 55.75, Lon: 37.61, HorizontalAccuracy: 10},
 	}, reqOpts{userID: 1})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("geo checkin: %d %s", rec.Code, rec.Body.String())
 	}
 	list := decode[[]checkin.Checkin](t, rec)
-	if len(list) != 1 || list[0].VotesRequired != 2 || list[0].Geo == nil {
+	if len(list) != 1 || list[0].VotesRequired != 2 || list[0].Geo == nil || list[0].Geo.HorizontalAccuracy != 10 {
 		t.Errorf("unexpected checkin: %+v", list)
 	}
 
@@ -577,13 +577,13 @@ func TestCreateCheckinGeo(t *testing.T) {
 		t.Errorf("bad geo: %d", rec.Code)
 	}
 	rec = e.do(t, "POST", "/api/v1/checkins", httpapi.CreateCheckinGeoRequest{
-		RoomIDs: []int64{room.ID}, Geo: checkin.Geo{Lat: 55, Lon: 37},
+		RoomIDs: []int64{room.ID}, Geo: checkin.Geo{Lat: 55, Lon: 37, HorizontalAccuracy: 10},
 	}, reqOpts{userID: 2})
 	if rec.Code != http.StatusForbidden {
 		t.Errorf("non-member checkin: %d", rec.Code)
 	}
 	rec = e.do(t, "POST", "/api/v1/checkins", httpapi.CreateCheckinGeoRequest{
-		RoomIDs: nil, Geo: checkin.Geo{Lat: 55, Lon: 37},
+		RoomIDs: nil, Geo: checkin.Geo{Lat: 55, Lon: 37, HorizontalAccuracy: 10},
 	}, reqOpts{userID: 1})
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("no rooms: %d", rec.Code)
@@ -623,7 +623,7 @@ func TestCreateCheckinWithBuddies(t *testing.T) {
 
 	// 3 never joined this room, so tagging them is quietly dropped instead of failing the checkin
 	rec := e.do(t, "POST", "/api/v1/checkins", httpapi.CreateCheckinGeoRequest{
-		RoomIDs: []int64{room.ID}, BuddyIDs: []int64{2, 3}, Geo: checkin.Geo{Lat: 55, Lon: 37},
+		RoomIDs: []int64{room.ID}, BuddyIDs: []int64{2, 3}, Geo: checkin.Geo{Lat: 55, Lon: 37, HorizontalAccuracy: 10},
 	}, reqOpts{userID: 1})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("checkin: %d %s", rec.Code, rec.Body.String())
@@ -817,7 +817,7 @@ func TestListCheckins(t *testing.T) {
 	path := fmt.Sprintf("/api/v1/rooms/%d/checkins", room.ID)
 
 	e.do(t, "POST", "/api/v1/checkins", httpapi.CreateCheckinGeoRequest{
-		RoomIDs: []int64{room.ID}, Geo: checkin.Geo{Lat: 55, Lon: 37},
+		RoomIDs: []int64{room.ID}, Geo: checkin.Geo{Lat: 55, Lon: 37, HorizontalAccuracy: 10},
 	}, reqOpts{userID: 1})
 
 	rec := e.do(t, "GET", path, nil, reqOpts{userID: 1})
@@ -845,7 +845,7 @@ func TestVote(t *testing.T) {
 	e.do(t, "POST", fmt.Sprintf("/api/v1/rooms/%d/join", room.ID), nil, reqOpts{userID: 2})
 
 	rec := e.do(t, "POST", "/api/v1/checkins", httpapi.CreateCheckinGeoRequest{
-		RoomIDs: []int64{room.ID}, Geo: checkin.Geo{Lat: 55, Lon: 37},
+		RoomIDs: []int64{room.ID}, Geo: checkin.Geo{Lat: 55, Lon: 37, HorizontalAccuracy: 10},
 	}, reqOpts{userID: 1})
 	c := decode[[]checkin.Checkin](t, rec)[0]
 	votePath := "/api/v1/checkins/" + c.ID + "/vote"
@@ -878,7 +878,7 @@ func TestCheckinServiceDown(t *testing.T) {
 	e.checkins.err = status.Error(codes.Unavailable, "connection refused")
 
 	rec := e.do(t, "POST", "/api/v1/checkins", httpapi.CreateCheckinGeoRequest{
-		RoomIDs: []int64{room.ID}, Geo: checkin.Geo{Lat: 55, Lon: 37},
+		RoomIDs: []int64{room.ID}, Geo: checkin.Geo{Lat: 55, Lon: 37, HorizontalAccuracy: 10},
 	}, reqOpts{userID: 1})
 	if rec.Code != http.StatusBadGateway {
 		t.Errorf("unavailable mapping: %d, want 502", rec.Code)

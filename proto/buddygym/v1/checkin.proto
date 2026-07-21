@@ -30,6 +30,7 @@ enum CheckinStatus {
 message GeoPoint {
   double lat = 1;
   double lon = 2;
+  double horizontal_accuracy = 3;
 }
 
 message Checkin {

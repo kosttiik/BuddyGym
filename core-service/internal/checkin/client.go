@@ -14,8 +14,9 @@ import (
 )
 
 type Geo struct {
-	Lat float64 `json:"lat"`
-	Lon float64 `json:"lon"`
+	Lat                float64 `json:"lat"`
+	Lon                float64 `json:"lon"`
+	HorizontalAccuracy float64 `json:"horizontal_accuracy,omitempty"`
 }
 
 // Target is one room a proof is submitted to. Quorum is per room.
@@ -36,14 +37,14 @@ type Checkin struct {
 	PhotoExpiresAt *time.Time `json:"photo_expires_at,omitempty"`
 	Geo            *Geo       `json:"geo,omitempty"`
 	// filled in by core, not checkin-service
-	Buddies        []domain.User `json:"buddies,omitempty"`
-	CommentsCount  int             `json:"comments_count"`
-	TopComment     *domain.Comment `json:"top_comment,omitempty"`
-	VotesApprove   int32         `json:"votes_approve"`
-	VotesReject    int32      `json:"votes_reject"`
-	VotesRequired  int32      `json:"votes_required"`
-	CreatedAt      time.Time  `json:"created_at"`
-	ExpiresAt      time.Time  `json:"expires_at"`
+	Buddies       []domain.User   `json:"buddies,omitempty"`
+	CommentsCount int             `json:"comments_count"`
+	TopComment    *domain.Comment `json:"top_comment,omitempty"`
+	VotesApprove  int32           `json:"votes_approve"`
+	VotesReject   int32           `json:"votes_reject"`
+	VotesRequired int32           `json:"votes_required"`
+	CreatedAt     time.Time       `json:"created_at"`
+	ExpiresAt     time.Time       `json:"expires_at"`
 }
 
 var statusNames = map[pbv1.CheckinStatus]string{
@@ -112,7 +113,9 @@ func (c *Client) Create(ctx context.Context, userID int64, targets []Target, pho
 		})
 	}
 	if geo != nil {
-		req.Proof = &pbv1.CreateCheckinRequest_Geo{Geo: &pbv1.GeoPoint{Lat: geo.Lat, Lon: geo.Lon}}
+		req.Proof = &pbv1.CreateCheckinRequest_Geo{Geo: &pbv1.GeoPoint{
+			Lat: geo.Lat, Lon: geo.Lon, HorizontalAccuracy: geo.HorizontalAccuracy,
+		}}
 	} else {
 		req.Proof = &pbv1.CreateCheckinRequest_Photo{Photo: photo}
 	}
