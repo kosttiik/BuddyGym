@@ -78,6 +78,13 @@ go run ./cmd/core
 
 Codegen: `make proto` (Go stubs, committed), `make swagger` (OpenAPI spec, freshness is checked in CI).
 
+## Notification bot
+
+[bot-service](bot-service/README.md) reads the `events` outbox in `core_db` and delivers branded
+cards in Telegram: comments, vote requests, verdicts, achievements and end-of-period reminders.
+It ships in `dry-run` mode, which renders every card to disk and sends nothing; flip `BOT_MODE`
+to `live` with a `BOT_NOTIFY_TOKEN` once the cards look right.
+
 ## Deploy
 
 [docker-compose.yml](docker-compose.yml) runs the whole stack for local work and exposes every service on the host for convenience.
