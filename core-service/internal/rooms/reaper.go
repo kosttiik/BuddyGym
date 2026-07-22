@@ -8,7 +8,6 @@ import (
 )
 
 const (
-	// a room sits marked for this long before it is really gone
 	DefaultGrace = 7 * 24 * time.Hour
 	batchSize    = 50
 )
@@ -22,7 +21,6 @@ type CheckinPurger interface {
 	PurgeRoom(ctx context.Context, roomID int64) error
 }
 
-// Reaper erases rooms that lost their last member and outlived the grace period.
 type Reaper struct {
 	rooms    Store
 	checkins CheckinPurger
@@ -87,7 +85,6 @@ func (r *Reaper) Sweep(ctx context.Context) error {
 	}
 
 	for _, id := range ids {
-		// checkins and their photos go first: losing the room row would strand them
 		if err := r.checkins.PurgeRoom(ctx, id); err != nil {
 			r.log.Error("purging checkins failed, room kept for the next sweep",
 				"room_id", id, "err", err)

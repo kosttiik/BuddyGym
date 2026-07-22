@@ -28,26 +28,23 @@ func (s *Server) streamAvatar(w http.ResponseWriter, r *http.Request, key string
 	}
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	// every upload gets its own key, so a picture is immutable once stored
 	w.Header().Set("Cache-Control", "private, max-age=3600")
 	if _, err := io.Copy(w, body); err != nil {
 		s.log.Error("streaming room avatar failed", "room_id", roomID, "err", err)
 	}
 }
 
-// handleGetRoomAvatar godoc
-//
-//	@Summary		Download the current room picture
-//	@Description	Streams the newest picture of the room from private object storage. Requires a Bearer token, so browsers must fetch it via XHR rather than a plain <img src>. Returns 404 when the room has no picture.
-//	@Tags			rooms
-//	@Security		BearerAuth
-//	@Produce		image/jpeg
-//	@Param			id	path		int	true	"room id"
-//	@Success		200	{file}		binary
-//	@Failure		400	{object}	ErrorResponse
-//	@Failure		401	{object}	ErrorResponse
-//	@Failure		404	{object}	ErrorResponse
-//	@Router			/rooms/{id}/avatar [get]
+// @Summary		Download the current room picture
+// @Description	Streams the newest picture of the room from private object storage. Requires a Bearer token, so browsers must fetch it via XHR rather than a plain <img src>. Returns 404 when the room has no picture.
+// @Tags			rooms
+// @Security		BearerAuth
+// @Produce		image/jpeg
+// @Param			id	path		int	true	"room id"
+// @Success		200	{file}		binary
+// @Failure		400	{object}	ErrorResponse
+// @Failure		401	{object}	ErrorResponse
+// @Failure		404	{object}	ErrorResponse
+// @Router			/rooms/{id}/avatar [get]
 func (s *Server) handleGetRoomAvatar(w http.ResponseWriter, r *http.Request) {
 	id, ok := roomID(r)
 	if !ok {
@@ -66,21 +63,19 @@ func (s *Server) handleGetRoomAvatar(w http.ResponseWriter, r *http.Request) {
 	s.streamAvatar(w, r, room.AvatarKey, room.ID)
 }
 
-// handleListRoomAvatars godoc
-//
-//	@Summary		List the room picture gallery
-//	@Description	Room members only. Newest first; the first entry is the picture the room currently wears.
-//	@Tags			rooms
-//	@Security		BearerAuth
-//	@Produce		json
-//	@Param			id	path		int	true	"room id"
-//	@Success		200	{array}		domain.RoomAvatar
-//	@Failure		400	{object}	ErrorResponse
-//	@Failure		401	{object}	ErrorResponse
-//	@Failure		403	{object}	ErrorResponse
-//	@Failure		404	{object}	ErrorResponse
-//	@Failure		500	{object}	ErrorResponse
-//	@Router			/rooms/{id}/avatars [get]
+// @Summary		List the room picture gallery
+// @Description	Room members only. Newest first; the first entry is the picture the room currently wears.
+// @Tags			rooms
+// @Security		BearerAuth
+// @Produce		json
+// @Param			id	path		int	true	"room id"
+// @Success		200	{array}		domain.RoomAvatar
+// @Failure		400	{object}	ErrorResponse
+// @Failure		401	{object}	ErrorResponse
+// @Failure		403	{object}	ErrorResponse
+// @Failure		404	{object}	ErrorResponse
+// @Failure		500	{object}	ErrorResponse
+// @Router			/rooms/{id}/avatars [get]
 func (s *Server) handleListRoomAvatars(w http.ResponseWriter, r *http.Request) {
 	room, ok := s.membership(w, r)
 	if !ok {
@@ -97,21 +92,19 @@ func (s *Server) handleListRoomAvatars(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, avatars)
 }
 
-// handleGetRoomAvatarByID godoc
-//
-//	@Summary		Download one picture from the gallery
-//	@Description	Room members only. Serves an older picture the room used to wear.
-//	@Tags			rooms
-//	@Security		BearerAuth
-//	@Produce		image/jpeg
-//	@Param			id			path		int	true	"room id"
-//	@Param			avatarId	path		int	true	"picture id"
-//	@Success		200			{file}		binary
-//	@Failure		400			{object}	ErrorResponse
-//	@Failure		401			{object}	ErrorResponse
-//	@Failure		403			{object}	ErrorResponse
-//	@Failure		404			{object}	ErrorResponse
-//	@Router			/rooms/{id}/avatars/{avatarId} [get]
+// @Summary		Download one picture from the gallery
+// @Description	Room members only. Serves an older picture the room used to wear.
+// @Tags			rooms
+// @Security		BearerAuth
+// @Produce		image/jpeg
+// @Param			id			path		int	true	"room id"
+// @Param			avatarId	path		int	true	"picture id"
+// @Success		200			{file}		binary
+// @Failure		400			{object}	ErrorResponse
+// @Failure		401			{object}	ErrorResponse
+// @Failure		403			{object}	ErrorResponse
+// @Failure		404			{object}	ErrorResponse
+// @Router			/rooms/{id}/avatars/{avatarId} [get]
 func (s *Server) handleGetRoomAvatarByID(w http.ResponseWriter, r *http.Request) {
 	room, ok := s.membership(w, r)
 	if !ok {
@@ -134,23 +127,21 @@ func (s *Server) handleGetRoomAvatarByID(w http.ResponseWriter, r *http.Request)
 	s.streamAvatar(w, r, avatar.ObjectKey, room.ID)
 }
 
-// handleAddRoomAvatar godoc
-//
-//	@Summary		Add a room picture
-//	@Description	Any room member may add one. Send multipart/form-data with a "photo" file up to 5 MB. The new picture becomes the face of the room; the previous ones stay in the gallery.
-//	@Tags			rooms
-//	@Security		BearerAuth
-//	@Accept			multipart/form-data
-//	@Produce		json
-//	@Param			id		path		int		true	"room id"
-//	@Param			photo	formData	file	true	"room picture"
-//	@Success		201		{object}	domain.RoomAvatar
-//	@Failure		400		{object}	ErrorResponse
-//	@Failure		401		{object}	ErrorResponse
-//	@Failure		403		{object}	ErrorResponse
-//	@Failure		404		{object}	ErrorResponse
-//	@Failure		500		{object}	ErrorResponse
-//	@Router			/rooms/{id}/avatar [put]
+// @Summary		Add a room picture
+// @Description	Any room member may add one. Send multipart/form-data with a "photo" file up to 5 MB. The new picture becomes the face of the room; the previous ones stay in the gallery.
+// @Tags			rooms
+// @Security		BearerAuth
+// @Accept			multipart/form-data
+// @Produce		json
+// @Param			id		path		int		true	"room id"
+// @Param			photo	formData	file	true	"room picture"
+// @Success		201		{object}	domain.RoomAvatar
+// @Failure		400		{object}	ErrorResponse
+// @Failure		401		{object}	ErrorResponse
+// @Failure		403		{object}	ErrorResponse
+// @Failure		404		{object}	ErrorResponse
+// @Failure		500		{object}	ErrorResponse
+// @Router			/rooms/{id}/avatar [put]
 func (s *Server) handleAddRoomAvatar(w http.ResponseWriter, r *http.Request) {
 	room, ok := s.membership(w, r)
 	if !ok {
@@ -196,7 +187,6 @@ func (s *Server) handleAddRoomAvatar(w http.ResponseWriter, r *http.Request) {
 	}
 	added, err := s.rooms.AddAvatar(r.Context(), room.ID, userFrom(r.Context()).ID, key)
 	if err != nil {
-		// the row is what makes the picture reachable, so a lost race only leaks bytes
 		if delErr := s.avatars.Delete(r.Context(), key); delErr != nil {
 			s.log.Error("dropping orphan room avatar failed", "room_id", room.ID, "err", delErr)
 		}
@@ -206,21 +196,19 @@ func (s *Server) handleAddRoomAvatar(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, added)
 }
 
-// handleDeleteRoomAvatar godoc
-//
-//	@Summary		Delete a room picture
-//	@Description	The member who uploaded it or the room creator. When the current picture goes, the room falls back to the newest one left.
-//	@Tags			rooms
-//	@Security		BearerAuth
-//	@Param			id			path	int	true	"room id"
-//	@Param			avatarId	path	int	true	"picture id"
-//	@Success		204
-//	@Failure		400	{object}	ErrorResponse
-//	@Failure		401	{object}	ErrorResponse
-//	@Failure		403	{object}	ErrorResponse
-//	@Failure		404	{object}	ErrorResponse
-//	@Failure		500	{object}	ErrorResponse
-//	@Router			/rooms/{id}/avatars/{avatarId} [delete]
+// @Summary		Delete a room picture
+// @Description	The member who uploaded it or the room creator. When the current picture goes, the room falls back to the newest one left.
+// @Tags			rooms
+// @Security		BearerAuth
+// @Param			id			path	int	true	"room id"
+// @Param			avatarId	path	int	true	"picture id"
+// @Success		204
+// @Failure		400	{object}	ErrorResponse
+// @Failure		401	{object}	ErrorResponse
+// @Failure		403	{object}	ErrorResponse
+// @Failure		404	{object}	ErrorResponse
+// @Failure		500	{object}	ErrorResponse
+// @Router			/rooms/{id}/avatars/{avatarId} [delete]
 func (s *Server) handleDeleteRoomAvatar(w http.ResponseWriter, r *http.Request) {
 	room, ok := s.membership(w, r)
 	if !ok {

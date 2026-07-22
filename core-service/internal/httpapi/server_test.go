@@ -63,6 +63,7 @@ func initDataFor(userID int64) string {
 type env struct {
 	users         *fakeUsers
 	rooms         *fakeRooms
+	freezes       *fakeFreezes
 	streaks       *fakeStreaks
 	buddies       *fakeBuddies
 	comments      *fakeComments
@@ -78,6 +79,7 @@ func newEnv(opts ...func(*httpapi.Options)) *env {
 	e := &env{
 		users:    newFakeUsers(),
 		rooms:    newFakeRooms(),
+		freezes:  newFakeFreezes(),
 		streaks:  newFakeStreaks(),
 		checkins: newFakeCheckins(),
 		avatars:  newFakeAvatars(),
@@ -88,6 +90,7 @@ func newEnv(opts ...func(*httpapi.Options)) *env {
 	o := httpapi.Options{
 		Users:         e.users,
 		Rooms:         e.rooms,
+		Freezes:       e.freezes,
 		Streaks:       e.streaks,
 		Buddies:       e.buddies,
 		Comments:      e.comments,
@@ -1166,5 +1169,40 @@ func TestUpdateMembership(t *testing.T) {
 	long := strings.Repeat("x", 33)
 	if rec := e.do(t, "PATCH", base, httpapi.UpdateMembershipRequest{SportName: long}, reqOpts{userID: 1}); rec.Code != http.StatusBadRequest {
 		t.Errorf("long sport name: %d, want 400", rec.Code)
+	}
+}
+
+func TestFreezeLifecycle(t *testing.T) {
+	e := newEnv()
+	room := e.createRoom(t, 1, domain.RoomOpen)
+	base := fmt.Sprintf("/api/v1/rooms/%d/freeze", room.ID)
+	day := func(offset int) string {
+		return time.Now().UTC().AddDate(0, 0, offset).Format("2006-01-02")
+	}
+
+	rec := e.do(t, "POST", base, httpapi.FreezeRequest{StartsAt: day(3), EndsAt: day(13)}, reqOpts{userID: 1})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create freeze: %d %s", rec.Code, rec.Body.String())
+	}
+	fz := decode[domain.Freeze](t, rec)
+	if fz.RoomID != room.ID || fz.UserID != 1 {
+		t.Errorf("freeze = %+v", fz)
+	}
+
+	if rec := e.do(t, "POST", base, httpapi.FreezeRequest{StartsAt: day(20), EndsAt: day(25)}, reqOpts{userID: 1}); rec.Code != http.StatusBadRequest {
+		t.Errorf("second freeze: %d, want 400", rec.Code)
+	}
+	if rec := e.do(t, "POST", base, httpapi.FreezeRequest{StartsAt: day(-2), EndsAt: day(5)}, reqOpts{userID: 2}); rec.Code != http.StatusForbidden {
+		t.Errorf("non-member freeze: %d, want 403", rec.Code)
+	}
+	if rec := e.do(t, "POST", base, httpapi.FreezeRequest{StartsAt: "not-a-date", EndsAt: day(5)}, reqOpts{userID: 1}); rec.Code != http.StatusBadRequest {
+		t.Errorf("bad date: %d, want 400", rec.Code)
+	}
+
+	if rec := e.do(t, "DELETE", base, nil, reqOpts{userID: 1}); rec.Code != http.StatusNoContent {
+		t.Errorf("cancel freeze: %d", rec.Code)
+	}
+	if rec := e.do(t, "DELETE", base, nil, reqOpts{userID: 1}); rec.Code != http.StatusNotFound {
+		t.Errorf("cancel again: %d, want 404", rec.Code)
 	}
 }

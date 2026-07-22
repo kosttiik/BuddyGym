@@ -7,36 +7,30 @@ import (
 	"github.com/kosttiik/BuddyGym/core-service/internal/domain"
 )
 
-// free themes shipped with the MVP; paid ones come later
 var allowedThemes = []string{"default", "dark", "neon"}
 
 type MeResponse struct {
-	User domain.User `json:"user"`
-	// the whole catalog, earned or not: a locked one carries its progress
+	User         domain.User                  `json:"user"`
 	Achievements []domain.AchievementProgress `json:"achievements"`
 	Stats        domain.Stats                 `json:"stats"`
-	// highest streak across the user rooms
-	BestStreak int `json:"best_streak"`
+	BestStreak   int                          `json:"best_streak"`
 }
 
-// Every field is optional: a nil one is left alone, an empty string clears it.
 type UpdateMeRequest struct {
 	Theme       *string `json:"theme,omitempty" example:"dark" enums:"default,dark,neon"`
 	StatusEmoji *string `json:"status_emoji,omitempty"`
 	StatusText  *string `json:"status_text,omitempty" example:"На массе"`
 }
 
-// handleGetMe godoc
-//
-//	@Summary		Get my profile
-//	@Description	Returns the authenticated user profile with achievements.
-//	@Tags			me
-//	@Security		BearerAuth
-//	@Produce		json
-//	@Success		200	{object}	MeResponse
-//	@Failure		401	{object}	ErrorResponse
-//	@Failure		500	{object}	ErrorResponse
-//	@Router			/me [get]
+// @Summary		Get my profile
+// @Description	Returns the authenticated user profile with achievements.
+// @Tags			me
+// @Security		BearerAuth
+// @Produce		json
+// @Success		200	{object}	MeResponse
+// @Failure		401	{object}	ErrorResponse
+// @Failure		500	{object}	ErrorResponse
+// @Router			/me [get]
 func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 	user := userFrom(r.Context())
 	progress, stats, err := s.profile(r, user.ID)
@@ -52,7 +46,6 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// profile gathers the achievement catalog folded against the user stats.
 func (s *Server) profile(r *http.Request, userID int64) ([]domain.AchievementProgress, domain.Stats, error) {
 	stats, err := s.users.Stats(r.Context(), userID)
 	if err != nil {
@@ -71,20 +64,18 @@ func (s *Server) profile(r *http.Request, userID int64) ([]domain.AchievementPro
 	return domain.Progress(stats, granted), stats, nil
 }
 
-// handlePatchMe godoc
-//
-//	@Summary		Update my profile
-//	@Description	Changes the theme and the status line. Every field is optional; only the ones present are written. Empty strings clear the status. The rank is derived from workouts and cannot be set.
-//	@Tags			me
-//	@Security		BearerAuth
-//	@Accept			json
-//	@Produce		json
-//	@Param			body	body		UpdateMeRequest	true	"fields to update"
-//	@Success		200		{object}	domain.User
-//	@Failure		400		{object}	ErrorResponse
-//	@Failure		401		{object}	ErrorResponse
-//	@Failure		500		{object}	ErrorResponse
-//	@Router			/me [patch]
+// @Summary		Update my profile
+// @Description	Changes the theme and the status line. Every field is optional; only the ones present are written. Empty strings clear the status. The rank is derived from workouts and cannot be set.
+// @Tags			me
+// @Security		BearerAuth
+// @Accept			json
+// @Produce		json
+// @Param			body	body		UpdateMeRequest	true	"fields to update"
+// @Success		200		{object}	domain.User
+// @Failure		400		{object}	ErrorResponse
+// @Failure		401		{object}	ErrorResponse
+// @Failure		500		{object}	ErrorResponse
+// @Router			/me [patch]
 func (s *Server) handlePatchMe(w http.ResponseWriter, r *http.Request) {
 	var req UpdateMeRequest
 	if !decodeJSON(w, r, &req) {
@@ -106,7 +97,6 @@ func (s *Server) handlePatchMe(w http.ResponseWriter, r *http.Request) {
 		user = updated
 	}
 
-	// the status is a pair: sending one half alone would leave a stray emoji or a naked line
 	if req.StatusEmoji != nil || req.StatusText != nil {
 		emoji, text := user.StatusEmoji, user.StatusText
 		if req.StatusEmoji != nil {

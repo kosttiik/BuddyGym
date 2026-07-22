@@ -1,5 +1,4 @@
 // Package objects wraps the S3 bucket core keeps its own binaries in: mirrored avatars and
-// photos attached to comments.
 package objects
 
 import (
@@ -37,7 +36,6 @@ func NewStore(ctx context.Context, cfg StoreConfig) (*Store, error) {
 	return s, s.ensureBucket(ctx)
 }
 
-// The bucket stays private: bytes are served through core, which checks the bearer token.
 func (s *Store) ensureBucket(ctx context.Context) error {
 	ok, err := s.client.BucketExists(ctx, s.bucket)
 	if err != nil {
@@ -56,13 +54,11 @@ func (s *Store) Put(ctx context.Context, key string, data []byte) error {
 	return err
 }
 
-// Open streams an object back. The caller closes the reader.
 func (s *Store) Open(ctx context.Context, key string) (io.ReadCloser, string, error) {
 	obj, err := s.client.GetObject(ctx, s.bucket, key, minio.GetObjectOptions{})
 	if err != nil {
 		return nil, "", err
 	}
-	// GetObject is lazy: the first Stat is what actually reports a missing object
 	info, err := obj.Stat()
 	if err != nil {
 		obj.Close()

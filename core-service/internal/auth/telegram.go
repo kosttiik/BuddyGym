@@ -28,8 +28,6 @@ type TelegramUser struct {
 	PhotoURL  string `json:"photo_url"`
 }
 
-// Validate checks Telegram Mini App initData per
-// https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app
 func Validate(initData, botToken string, maxAge time.Duration, now time.Time) (TelegramUser, error) {
 	vals, err := url.ParseQuery(initData)
 	if err != nil {

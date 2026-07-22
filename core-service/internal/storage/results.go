@@ -26,12 +26,7 @@ func NewResults(pool *pgxpool.Pool) *Results {
 	return &Results{pool: pool}
 }
 
-// Apply records a final checkin result exactly once, guarded by the checkin_id primary key.
-// Returns applied=false when this checkin_id was already processed. Period counters are
-// derived from these rows on read, so there is nothing else to keep in sync here.
-//
-// ponytail: memberships.workouts_count and period_start are now written by nobody and read by
-// nobody. Left in place so a rollback still finds them; drop them once this ships and sticks.
+// ponytail: memberships.workouts_count and period_start are dead columns, kept for rollback; drop once this sticks
 func (r *Results) Apply(ctx context.Context, checkinID string, roomID, userID int64, status string, createdAt time.Time) (bool, error) {
 	tag, err := r.pool.Exec(ctx, `
 		INSERT INTO checkin_results (checkin_id, room_id, user_id, status, checkin_created_at)
@@ -62,17 +57,15 @@ const streakInputQuery = `
 	GROUP BY m.room_id, m.user_id, ` + effectiveGoal + `, r.period_days, m.joined_at, day
 	ORDER BY m.room_id, m.user_id, day`
 
-// StreaksByRoom returns one input per member of the room.
 func (r *Results) StreaksByRoom(ctx context.Context, roomID int64) ([]domain.StreakInput, error) {
-	return r.streakInputs(ctx, fmt.Sprintf(streakInputQuery, "m.room_id = $1"), roomID)
+	return r.streakInputs(ctx, fmt.Sprintf(streakInputQuery, "m.room_id = $1"), "room_id = $1", roomID)
 }
 
-// StreaksByUser returns one input per room the user belongs to.
 func (r *Results) StreaksByUser(ctx context.Context, userID int64) ([]domain.StreakInput, error) {
-	return r.streakInputs(ctx, fmt.Sprintf(streakInputQuery, "m.user_id = $1"), userID)
+	return r.streakInputs(ctx, fmt.Sprintf(streakInputQuery, "m.user_id = $1"), "user_id = $1", userID)
 }
 
-func (r *Results) streakInputs(ctx context.Context, query string, arg int64) ([]domain.StreakInput, error) {
+func (r *Results) streakInputs(ctx context.Context, query, freezeFilter string, arg int64) ([]domain.StreakInput, error) {
 	rows, err := r.pool.Query(ctx, query, arg)
 	if err != nil {
 		return nil, err
@@ -101,7 +94,28 @@ func (r *Results) streakInputs(ctx context.Context, query string, arg int64) ([]
 		}
 		out = append(out, in)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	frows, err := r.pool.Query(ctx,
+		"SELECT "+freezeColumns+" FROM freezes WHERE "+freezeFilter, arg)
+	if err != nil {
+		return nil, err
+	}
+	freezes, err := collectFreezes(frows)
+	if err != nil {
+		return nil, err
+	}
+	for _, fz := range freezes {
+		for i := range out {
+			if out[i].RoomID == fz.RoomID && out[i].UserID == fz.UserID {
+				out[i].Freezes = append(out[i].Freezes, fz)
+				break
+			}
+		}
+	}
+	return out, nil
 }
 
 func (r *Results) PeriodCount(ctx context.Context, roomID, userID int64) (int, error) {

@@ -1,7 +1,5 @@
 package domain
 
-// SportEmojis is the full Unicode sport and activity set the picker offers.
-// The frontend list must stay identical, including variation selectors.
 var sportEmojiList = []string{
 	"⚽", "🏀", "🏈", "⚾", "🥎", "🎾", "🏐", "🏉", "🥏", "🎱",
 	"🏓", "🏸", "🏒", "🏑", "🥍", "🏏", "🎳", "🥅", "⛳", "🪁",

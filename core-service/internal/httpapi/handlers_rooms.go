@@ -22,8 +22,6 @@ type JoinByCodeRequest struct {
 	InviteCode string `json:"invite_code" example:"7HKPQ2XW"`
 }
 
-// UpdateMembershipRequest replaces the member's personal settings in a room.
-// A null goal_per_period falls back to the room goal; empty strings clear the sport.
 type UpdateMembershipRequest struct {
 	SportName     string `json:"sport_name" example:"climbing"`
 	SportEmoji    string `json:"sport_emoji" example:"🧗"`
@@ -70,7 +68,6 @@ func roomID(r *http.Request) (int64, bool) {
 	return id, err == nil && id > 0
 }
 
-// membership loads the room and checks the current user is in it.
 func (s *Server) membership(w http.ResponseWriter, r *http.Request) (domain.Room, bool) {
 	id, ok := roomID(r)
 	if !ok {
@@ -94,20 +91,18 @@ func (s *Server) membership(w http.ResponseWriter, r *http.Request) (domain.Room
 	return room, true
 }
 
-// handleCreateRoom godoc
-//
-//	@Summary		Create a room
-//	@Description	Creates a room and enrolls the creator. Returns the room with its invite code.
-//	@Tags			rooms
-//	@Security		BearerAuth
-//	@Accept			json
-//	@Produce		json
-//	@Param			body	body		CreateRoomRequest	true	"room settings"
-//	@Success		201		{object}	domain.Room
-//	@Failure		400		{object}	ErrorResponse
-//	@Failure		401		{object}	ErrorResponse
-//	@Failure		500		{object}	ErrorResponse
-//	@Router			/rooms [post]
+// @Summary		Create a room
+// @Description	Creates a room and enrolls the creator. Returns the room with its invite code.
+// @Tags			rooms
+// @Security		BearerAuth
+// @Accept			json
+// @Produce		json
+// @Param			body	body		CreateRoomRequest	true	"room settings"
+// @Success		201		{object}	domain.Room
+// @Failure		400		{object}	ErrorResponse
+// @Failure		401		{object}	ErrorResponse
+// @Failure		500		{object}	ErrorResponse
+// @Router			/rooms [post]
 func (s *Server) handleCreateRoom(w http.ResponseWriter, r *http.Request) {
 	var req CreateRoomRequest
 	if !decodeJSON(w, r, &req) {
@@ -132,23 +127,21 @@ func (s *Server) handleCreateRoom(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, room)
 }
 
-// handleUpdateRoom godoc
-//
-//	@Summary		Update a room
-//	@Description	Updates room settings. Only the creator may do this.
-//	@Tags			rooms
-//	@Security		BearerAuth
-//	@Accept			json
-//	@Produce		json
-//	@Param			id		path	int				true	"room id"
-//	@Param			body	body	UpdateRoomRequest	true	"room settings"
-//	@Success		200	{object}	domain.Room
-//	@Failure		400	{object}	ErrorResponse
-//	@Failure		401	{object}	ErrorResponse
-//	@Failure		403	{object}	ErrorResponse
-//	@Failure		404	{object}	ErrorResponse
-//	@Failure		500	{object}	ErrorResponse
-//	@Router			/rooms/{id} [patch]
+// @Summary		Update a room
+// @Description	Updates room settings. Only the creator may do this.
+// @Tags			rooms
+// @Security		BearerAuth
+// @Accept			json
+// @Produce		json
+// @Param			id		path	int				true	"room id"
+// @Param			body	body	UpdateRoomRequest	true	"room settings"
+// @Success		200	{object}	domain.Room
+// @Failure		400	{object}	ErrorResponse
+// @Failure		401	{object}	ErrorResponse
+// @Failure		403	{object}	ErrorResponse
+// @Failure		404	{object}	ErrorResponse
+// @Failure		500	{object}	ErrorResponse
+// @Router			/rooms/{id} [patch]
 func (s *Server) handleUpdateRoom(w http.ResponseWriter, r *http.Request) {
 	id, ok := roomID(r)
 	if !ok {
@@ -182,22 +175,20 @@ func (s *Server) handleUpdateRoom(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, updated)
 }
 
-// handleUpdateMembership godoc
-//
-//	@Summary		Update my settings in a room
-//	@Description	Sets the member's personal sport and workout goal for this room. Null goal falls back to the room goal, empty strings clear the sport.
-//	@Tags			rooms
-//	@Security		BearerAuth
-//	@Accept			json
-//	@Param			id		path	int							true	"room id"
-//	@Param			body	body	UpdateMembershipRequest	true	"personal settings"
-//	@Success		204
-//	@Failure		400	{object}	ErrorResponse
-//	@Failure		401	{object}	ErrorResponse
-//	@Failure		403	{object}	ErrorResponse
-//	@Failure		404	{object}	ErrorResponse
-//	@Failure		500	{object}	ErrorResponse
-//	@Router			/rooms/{id}/membership [patch]
+// @Summary		Update my settings in a room
+// @Description	Sets the member's personal sport and workout goal for this room. Null goal falls back to the room goal, empty strings clear the sport.
+// @Tags			rooms
+// @Security		BearerAuth
+// @Accept			json
+// @Param			id		path	int							true	"room id"
+// @Param			body	body	UpdateMembershipRequest	true	"personal settings"
+// @Success		204
+// @Failure		400	{object}	ErrorResponse
+// @Failure		401	{object}	ErrorResponse
+// @Failure		403	{object}	ErrorResponse
+// @Failure		404	{object}	ErrorResponse
+// @Failure		500	{object}	ErrorResponse
+// @Router			/rooms/{id}/membership [patch]
 func (s *Server) handleUpdateMembership(w http.ResponseWriter, r *http.Request) {
 	room, ok := s.membership(w, r)
 	if !ok {
@@ -219,20 +210,18 @@ func (s *Server) handleUpdateMembership(w http.ResponseWriter, r *http.Request) 
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleDeleteRoom godoc
-//
-//	@Summary		Delete a room
-//	@Description	Deletes a room and its memberships. Only the creator may do this.
-//	@Tags			rooms
-//	@Security		BearerAuth
-//	@Param			id	path	int	true	"room id"
-//	@Success		204
-//	@Failure		400	{object}	ErrorResponse
-//	@Failure		401	{object}	ErrorResponse
-//	@Failure		403	{object}	ErrorResponse
-//	@Failure		404	{object}	ErrorResponse
-//	@Failure		500	{object}	ErrorResponse
-//	@Router			/rooms/{id} [delete]
+// @Summary		Delete a room
+// @Description	Deletes a room and its memberships. Only the creator may do this.
+// @Tags			rooms
+// @Security		BearerAuth
+// @Param			id	path	int	true	"room id"
+// @Success		204
+// @Failure		400	{object}	ErrorResponse
+// @Failure		401	{object}	ErrorResponse
+// @Failure		403	{object}	ErrorResponse
+// @Failure		404	{object}	ErrorResponse
+// @Failure		500	{object}	ErrorResponse
+// @Router			/rooms/{id} [delete]
 func (s *Server) handleDeleteRoom(w http.ResponseWriter, r *http.Request) {
 	id, ok := roomID(r)
 	if !ok {
@@ -255,17 +244,15 @@ func (s *Server) handleDeleteRoom(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleListRooms godoc
-//
-//	@Summary		List my rooms
-//	@Description	Rooms the user belongs to, with the current period workout counter.
-//	@Tags			rooms
-//	@Security		BearerAuth
-//	@Produce		json
-//	@Success		200	{array}		domain.RoomWithProgress
-//	@Failure		401	{object}	ErrorResponse
-//	@Failure		500	{object}	ErrorResponse
-//	@Router			/rooms [get]
+// @Summary		List my rooms
+// @Description	Rooms the user belongs to, with the current period workout counter.
+// @Tags			rooms
+// @Security		BearerAuth
+// @Produce		json
+// @Success		200	{array}		domain.RoomWithProgress
+// @Failure		401	{object}	ErrorResponse
+// @Failure		500	{object}	ErrorResponse
+// @Router			/rooms [get]
 func (s *Server) handleListRooms(w http.ResponseWriter, r *http.Request) {
 	userID := userFrom(r.Context()).ID
 	rooms, err := s.rooms.ListByUser(r.Context(), userID)
@@ -292,17 +279,15 @@ func (s *Server) handleListRooms(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, rooms)
 }
 
-// handleListOpenRooms godoc
-//
-//	@Summary		List open rooms
-//	@Description	Rooms anyone can join, excluding the ones the user is already in. Invite codes are not returned.
-//	@Tags			rooms
-//	@Security		BearerAuth
-//	@Produce		json
-//	@Success		200	{array}		domain.Room
-//	@Failure		401	{object}	ErrorResponse
-//	@Failure		500	{object}	ErrorResponse
-//	@Router			/rooms/open [get]
+// @Summary		List open rooms
+// @Description	Rooms anyone can join, excluding the ones the user is already in. Invite codes are not returned.
+// @Tags			rooms
+// @Security		BearerAuth
+// @Produce		json
+// @Success		200	{array}		domain.Room
+// @Failure		401	{object}	ErrorResponse
+// @Failure		500	{object}	ErrorResponse
+// @Router			/rooms/open [get]
 func (s *Server) handleListOpenRooms(w http.ResponseWriter, r *http.Request) {
 	rooms, err := s.rooms.ListOpen(r.Context(), userFrom(r.Context()).ID)
 	if err != nil {
@@ -315,21 +300,19 @@ func (s *Server) handleListOpenRooms(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, rooms)
 }
 
-// handleGetRoom godoc
-//
-//	@Summary		Get room details
-//	@Description	Room with members. Invite-only rooms are visible to members only; the invite code is hidden from non-members.
-//	@Tags			rooms
-//	@Security		BearerAuth
-//	@Produce		json
-//	@Param			id	path		int	true	"room id"
-//	@Success		200	{object}	RoomDetailResponse
-//	@Failure		400	{object}	ErrorResponse
-//	@Failure		401	{object}	ErrorResponse
-//	@Failure		403	{object}	ErrorResponse
-//	@Failure		404	{object}	ErrorResponse
-//	@Failure		500	{object}	ErrorResponse
-//	@Router			/rooms/{id} [get]
+// @Summary		Get room details
+// @Description	Room with members. Invite-only rooms are visible to members only; the invite code is hidden from non-members.
+// @Tags			rooms
+// @Security		BearerAuth
+// @Produce		json
+// @Param			id	path		int	true	"room id"
+// @Success		200	{object}	RoomDetailResponse
+// @Failure		400	{object}	ErrorResponse
+// @Failure		401	{object}	ErrorResponse
+// @Failure		403	{object}	ErrorResponse
+// @Failure		404	{object}	ErrorResponse
+// @Failure		500	{object}	ErrorResponse
+// @Router			/rooms/{id} [get]
 func (s *Server) handleGetRoom(w http.ResponseWriter, r *http.Request) {
 	id, ok := roomID(r)
 	if !ok {
@@ -363,31 +346,36 @@ func (s *Server) handleGetRoom(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, err)
 		return
 	}
-	byUser := make(map[int64]int, len(streaks))
+	byUser := make(map[int64]domain.StreakInput, len(streaks))
 	for _, in := range streaks {
-		byUser[in.UserID] = in.Streak(s.now())
+		byUser[in.UserID] = in
 	}
+	now := s.now()
 	for i := range members {
-		members[i].Streak = byUser[members[i].ID]
+		in := byUser[members[i].ID]
+		members[i].Streak = in.Streak(now)
+		members[i].HasClosedPeriod, members[i].LastClosedPeriodFailed = in.Judgment(now)
+		members[i].Freeze = domain.CurrentFreeze(in.Freezes, now)
+		if until := domain.FreezeCooldownUntil(in.Freezes, now); !until.IsZero() {
+			members[i].FreezeCooldownUntil = &until
+		}
 	}
 	writeJSON(w, http.StatusOK, RoomDetailResponse{Room: room, Members: members})
 }
 
-// handleJoinRoom godoc
-//
-//	@Summary		Join an open room
-//	@Description	Joins an open room by id. Invite-only rooms require POST /rooms/join with a code. Idempotent.
-//	@Tags			rooms
-//	@Security		BearerAuth
-//	@Produce		json
-//	@Param			id	path		int	true	"room id"
-//	@Success		200	{object}	domain.Room
-//	@Failure		400	{object}	ErrorResponse
-//	@Failure		401	{object}	ErrorResponse
-//	@Failure		403	{object}	ErrorResponse
-//	@Failure		404	{object}	ErrorResponse
-//	@Failure		500	{object}	ErrorResponse
-//	@Router			/rooms/{id}/join [post]
+// @Summary		Join an open room
+// @Description	Joins an open room by id. Invite-only rooms require POST /rooms/join with a code. Idempotent.
+// @Tags			rooms
+// @Security		BearerAuth
+// @Produce		json
+// @Param			id	path		int	true	"room id"
+// @Success		200	{object}	domain.Room
+// @Failure		400	{object}	ErrorResponse
+// @Failure		401	{object}	ErrorResponse
+// @Failure		403	{object}	ErrorResponse
+// @Failure		404	{object}	ErrorResponse
+// @Failure		500	{object}	ErrorResponse
+// @Router			/rooms/{id}/join [post]
 func (s *Server) handleJoinRoom(w http.ResponseWriter, r *http.Request) {
 	id, ok := roomID(r)
 	if !ok {
@@ -410,21 +398,19 @@ func (s *Server) handleJoinRoom(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, room)
 }
 
-// handleJoinByCode godoc
-//
-//	@Summary		Join a room by invite code
-//	@Description	Joins any room using its invite code. Idempotent.
-//	@Tags			rooms
-//	@Security		BearerAuth
-//	@Accept			json
-//	@Produce		json
-//	@Param			body	body		JoinByCodeRequest	true	"invite code"
-//	@Success		200		{object}	domain.Room
-//	@Failure		400		{object}	ErrorResponse
-//	@Failure		401		{object}	ErrorResponse
-//	@Failure		404		{object}	ErrorResponse
-//	@Failure		500		{object}	ErrorResponse
-//	@Router			/rooms/join [post]
+// @Summary		Join a room by invite code
+// @Description	Joins any room using its invite code. Idempotent.
+// @Tags			rooms
+// @Security		BearerAuth
+// @Accept			json
+// @Produce		json
+// @Param			body	body		JoinByCodeRequest	true	"invite code"
+// @Success		200		{object}	domain.Room
+// @Failure		400		{object}	ErrorResponse
+// @Failure		401		{object}	ErrorResponse
+// @Failure		404		{object}	ErrorResponse
+// @Failure		500		{object}	ErrorResponse
+// @Router			/rooms/join [post]
 func (s *Server) handleJoinByCode(w http.ResponseWriter, r *http.Request) {
 	var req JoinByCodeRequest
 	if !decodeJSON(w, r, &req) {
@@ -447,19 +433,17 @@ func (s *Server) handleJoinByCode(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, room)
 }
 
-// handleLeaveRoom godoc
-//
-//	@Summary		Leave a room
-//	@Tags			rooms
-//	@Security		BearerAuth
-//	@Produce		json
-//	@Param			id	path	int	true	"room id"
-//	@Success		204
-//	@Failure		400	{object}	ErrorResponse
-//	@Failure		401	{object}	ErrorResponse
-//	@Failure		404	{object}	ErrorResponse
-//	@Failure		500	{object}	ErrorResponse
-//	@Router			/rooms/{id}/leave [post]
+// @Summary		Leave a room
+// @Tags			rooms
+// @Security		BearerAuth
+// @Produce		json
+// @Param			id	path	int	true	"room id"
+// @Success		204
+// @Failure		400	{object}	ErrorResponse
+// @Failure		401	{object}	ErrorResponse
+// @Failure		404	{object}	ErrorResponse
+// @Failure		500	{object}	ErrorResponse
+// @Router			/rooms/{id}/leave [post]
 func (s *Server) handleLeaveRoom(w http.ResponseWriter, r *http.Request) {
 	id, ok := roomID(r)
 	if !ok {

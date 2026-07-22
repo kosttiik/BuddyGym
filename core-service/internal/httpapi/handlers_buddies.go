@@ -14,8 +14,6 @@ type BuddiesRequest struct {
 	UserIDs []int64 `json:"user_ids"`
 }
 
-// A buddy who is not in this room is dropped rather than failing the whole request: tagging a
-// partner who shares one of your three rooms should still credit them in that one.
 func (s *Server) resolveBuddies(w http.ResponseWriter, r *http.Request, roomID int64, userIDs []int64) ([]int64, bool) {
 	author := userFrom(r.Context()).ID
 	if len(userIDs) > maxBuddies {
@@ -47,23 +45,21 @@ func (s *Server) resolveBuddies(w http.ResponseWriter, r *http.Request, roomID i
 	return out, true
 }
 
-// handleAddBuddies godoc
-//
-//	@Summary		Tag people who trained with you
-//	@Description	Adds buddies to a checkin that is still being voted on. Only the author can tag, and buddies who are not members of the checkin room are ignored. The workout is credited to them once the room approves the checkin, so a rejected photo hands out nothing.
-//	@Tags			checkins
-//	@Security		BearerAuth
-//	@Accept			json
-//	@Produce		json
-//	@Param			id		path		string			true	"checkin id"
-//	@Param			body	body		BuddiesRequest	true	"tagged user ids"
-//	@Success		200		{array}		domain.User
-//	@Failure		400		{object}	ErrorResponse
-//	@Failure		401		{object}	ErrorResponse
-//	@Failure		403		{object}	ErrorResponse
-//	@Failure		404		{object}	ErrorResponse
-//	@Failure		409		{object}	ErrorResponse
-//	@Router			/checkins/{id}/buddies [post]
+// @Summary		Tag people who trained with you
+// @Description	Adds buddies to a checkin that is still being voted on. Only the author can tag, and buddies who are not members of the checkin room are ignored. The workout is credited to them once the room approves the checkin, so a rejected photo hands out nothing.
+// @Tags			checkins
+// @Security		BearerAuth
+// @Accept			json
+// @Produce		json
+// @Param			id		path		string			true	"checkin id"
+// @Param			body	body		BuddiesRequest	true	"tagged user ids"
+// @Success		200		{array}		domain.User
+// @Failure		400		{object}	ErrorResponse
+// @Failure		401		{object}	ErrorResponse
+// @Failure		403		{object}	ErrorResponse
+// @Failure		404		{object}	ErrorResponse
+// @Failure		409		{object}	ErrorResponse
+// @Router			/checkins/{id}/buddies [post]
 func (s *Server) handleAddBuddies(w http.ResponseWriter, r *http.Request) {
 	checkinID := r.PathValue("id")
 	if checkinID == "" {
@@ -102,21 +98,19 @@ func (s *Server) handleAddBuddies(w http.ResponseWriter, r *http.Request) {
 	s.writeBuddies(w, r, checkinID)
 }
 
-// handleRemoveBuddy godoc
-//
-//	@Summary		Remove a tagged buddy
-//	@Description	Untags a buddy from a checkin. Only the author can untag, and only while the checkin is still pending: once it is approved the workout is already theirs.
-//	@Tags			checkins
-//	@Security		BearerAuth
-//	@Produce		json
-//	@Param			id		path		string	true	"checkin id"
-//	@Param			userId	path		int		true	"tagged user id"
-//	@Success		200		{array}		domain.User
-//	@Failure		401		{object}	ErrorResponse
-//	@Failure		403		{object}	ErrorResponse
-//	@Failure		404		{object}	ErrorResponse
-//	@Failure		409		{object}	ErrorResponse
-//	@Router			/checkins/{id}/buddies/{userId} [delete]
+// @Summary		Remove a tagged buddy
+// @Description	Untags a buddy from a checkin. Only the author can untag, and only while the checkin is still pending: once it is approved the workout is already theirs.
+// @Tags			checkins
+// @Security		BearerAuth
+// @Produce		json
+// @Param			id		path		string	true	"checkin id"
+// @Param			userId	path		int		true	"tagged user id"
+// @Success		200		{array}		domain.User
+// @Failure		401		{object}	ErrorResponse
+// @Failure		403		{object}	ErrorResponse
+// @Failure		404		{object}	ErrorResponse
+// @Failure		409		{object}	ErrorResponse
+// @Router			/checkins/{id}/buddies/{userId} [delete]
 func (s *Server) handleRemoveBuddy(w http.ResponseWriter, r *http.Request) {
 	checkinID := r.PathValue("id")
 	buddyID, err := strconv.ParseInt(r.PathValue("userId"), 10, 64)
@@ -168,7 +162,6 @@ func (s *Server) enrichBuddies(r *http.Request, list []checkin.Checkin) []checki
 	}
 	byCheckin, err := s.buddies.ForCheckins(r.Context(), ids)
 	if err != nil {
-		// the feed is worth more than the tags: serve the checkins without them
 		s.log.Error("load buddies", "err", err)
 		return list
 	}

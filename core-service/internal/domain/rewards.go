@@ -2,8 +2,6 @@ package domain
 
 import "time"
 
-// Ranks are derived from the workout total. The member cannot set them; what they can set
-// is the free-text status next to their name.
 const (
 	RankNovice  = "novice"
 	RankRegular = "regular"
@@ -21,7 +19,6 @@ func RankFor(totalWorkouts int) string {
 	}
 }
 
-// StreakInput is one membership with its approved workout days.
 type StreakInput struct {
 	RoomID     int64
 	UserID     int64
@@ -29,13 +26,17 @@ type StreakInput struct {
 	PeriodDays int
 	JoinedAt   time.Time
 	Days       []time.Time
+	Freezes    []Freeze
 }
 
 func (in StreakInput) Streak(now time.Time) int {
-	return RoomStreak(in.Days, in.JoinedAt, in.Goal, in.PeriodDays, now)
+	return RoomStreak(in.Days, in.JoinedAt, in.Goal, in.PeriodDays, now, in.Freezes...)
 }
 
-// BestStreak is the highest streak the user holds across the rooms they belong to.
+func (in StreakInput) Judgment(now time.Time) (hasClosed, lastFailed bool) {
+	return PeriodJudgment(in.Days, in.JoinedAt, in.Goal, in.PeriodDays, now, in.Freezes...)
+}
+
 func BestStreak(inputs []StreakInput, now time.Time) int {
 	best := 0
 	for _, in := range inputs {
@@ -44,47 +45,90 @@ func BestStreak(inputs []StreakInput, now time.Time) int {
 	return best
 }
 
-// RoomStreak counts workout days since the last period the member failed to meet the
-// room goal. A period is failed when it closed with fewer than goal workout days; the
-// period in progress is never judged, so a streak cannot burn while there is still time
-// to train. Days must be distinct UTC dates. The grid is anchored on joinedAt because
-// memberships.period_start only moves when a checkin lands and would drift.
-func RoomStreak(days []time.Time, joinedAt time.Time, goal, periodDays int, now time.Time) int {
+func RoomStreak(days []time.Time, joinedAt time.Time, goal, periodDays int, now time.Time, freezes ...Freeze) int {
+	g, ok := newPeriodGrid(days, joinedAt, goal, periodDays, now, freezes)
+	if !ok {
+		return 0
+	}
+	streak := g.counts[g.current]
+	for k := g.current - 1; k >= 0; k-- {
+		if g.exempt(k) {
+			streak += g.counts[k]
+			continue
+		}
+		if g.counts[k] < goal {
+			break
+		}
+		streak += g.counts[k]
+	}
+	return streak
+}
+
+func PeriodJudgment(days []time.Time, joinedAt time.Time, goal, periodDays int, now time.Time, freezes ...Freeze) (hasClosed, lastFailed bool) {
+	g, ok := newPeriodGrid(days, joinedAt, goal, periodDays, now, freezes)
+	if !ok {
+		return false, false
+	}
+	for k := g.current - 1; k >= 0; k-- {
+		if g.exempt(k) {
+			continue
+		}
+		return true, g.counts[k] < goal
+	}
+	return false, false
+}
+
+type periodGrid struct {
+	anchor  time.Time
+	period  time.Duration
+	current int
+	counts  map[int]int
+	windows [][2]time.Time
+}
+
+func newPeriodGrid(days []time.Time, joinedAt time.Time, goal, periodDays int, now time.Time, freezes []Freeze) (periodGrid, bool) {
 	if goal <= 0 || periodDays <= 0 {
-		return 0
+		return periodGrid{}, false
 	}
-	anchor := joinedAt.UTC().Truncate(24 * time.Hour)
-	period := time.Duration(periodDays) * 24 * time.Hour
-
+	g := periodGrid{
+		anchor: joinedAt.UTC().Truncate(oneDay),
+		period: time.Duration(periodDays) * oneDay,
+	}
 	index := func(t time.Time) int {
-		return int(t.UTC().Truncate(24*time.Hour).Sub(anchor) / period)
+		return int(t.UTC().Truncate(oneDay).Sub(g.anchor) / g.period)
 	}
-
-	current := index(now)
-	if current < 0 {
-		return 0
+	g.current = index(now)
+	if g.current < 0 {
+		return periodGrid{}, false
 	}
-
-	counts := make(map[int]int, len(days))
+	g.counts = make(map[int]int, len(days))
 	for _, d := range days {
 		// a rejoin resets joined_at, so results from an earlier membership can predate the grid.
 		// compare dates rather than the period index: negative durations truncate toward zero,
 		// so a day inside the period before the anchor would otherwise index as 0.
-		day := d.UTC().Truncate(24 * time.Hour)
-		if day.Before(anchor) {
+		dd := d.UTC().Truncate(oneDay)
+		if dd.Before(g.anchor) {
 			continue
 		}
-		if k := index(day); k <= current {
-			counts[k]++
+		if k := index(dd); k <= g.current {
+			g.counts[k]++
 		}
 	}
+	for _, f := range freezes {
+		if start, end, ok := f.Window(); ok {
+			g.windows = append(g.windows, [2]time.Time{start, end})
+		}
+	}
+	return g, true
+}
 
-	streak := counts[current]
-	for k := current - 1; k >= 0; k-- {
-		if counts[k] < goal {
-			break
+func (g periodGrid) exempt(k int) bool {
+	start := g.anchor.Add(time.Duration(k) * g.period)
+	end := start.Add(g.period)
+	for _, w := range g.windows {
+		if w[0].Before(end) && w[1].After(start) {
+			return true
 		}
-		streak += counts[k]
 	}
-	return streak
+	return false
 }

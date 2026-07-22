@@ -1757,6 +1757,138 @@ const docTemplate = `{
                 }
             }
         },
+        "/rooms/{id}/freeze": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Schedules a freeze: periods overlapping it are not judged. One active or scheduled freeze at a time; a cooldown of max(7, length) days follows each freeze.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rooms"
+                ],
+                "summary": "Freeze my membership",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "room id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "freeze window, dates in YYYY-MM-DD",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.FreezeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/domain.Freeze"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Cancels the scheduled freeze or unfreezes early. The cooldown counts the days actually used.",
+                "tags": [
+                    "rooms"
+                ],
+                "summary": "Cancel my freeze",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "room id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/rooms/{id}/join": {
             "post": {
                 "security": [
@@ -2061,7 +2193,6 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "buddies": {
-                    "description": "filled in by core, not checkin-service",
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/domain.User"
@@ -2080,7 +2211,6 @@ const docTemplate = `{
                     "$ref": "#/definitions/checkin.Geo"
                 },
                 "has_photo": {
-                    "description": "the storage key never leaves core; clients fetch bytes from /checkins/{id}/photo",
                     "type": "boolean"
                 },
                 "id": {
@@ -2090,7 +2220,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "photo_purged": {
-                    "description": "photos are purged after a retention window; once purged the bytes are gone for good",
                     "type": "boolean"
                 },
                 "room_id": {
@@ -2169,7 +2298,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "has_photo": {
-                    "description": "bytes come from GET /checkins/{id}/comments/{commentId}/photo, the bucket is private",
                     "type": "boolean"
                 },
                 "id": {
@@ -2180,6 +2308,32 @@ const docTemplate = `{
                 },
                 "likes": {
                     "type": "integer"
+                },
+                "user_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "domain.Freeze": {
+            "type": "object",
+            "properties": {
+                "canceled_at": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "ends_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "room_id": {
+                    "type": "integer"
+                },
+                "starts_at": {
+                    "type": "string"
                 },
                 "user_id": {
                     "type": "integer"
@@ -2198,11 +2352,19 @@ const docTemplate = `{
                 "first_name": {
                     "type": "string"
                 },
+                "freeze": {
+                    "$ref": "#/definitions/domain.Freeze"
+                },
+                "freeze_cooldown_until": {
+                    "type": "string"
+                },
                 "goal_per_period": {
                     "type": "integer"
                 },
                 "has_avatar": {
-                    "description": "clients read the bytes from GET /users/{id}/avatar, never from object storage directly",
+                    "type": "boolean"
+                },
+                "has_closed_period": {
                     "type": "boolean"
                 },
                 "id": {
@@ -2211,26 +2373,25 @@ const docTemplate = `{
                 "joined_at": {
                     "type": "string"
                 },
+                "last_closed_period_failed": {
+                    "type": "boolean"
+                },
                 "period_ends_at": {
                     "type": "string"
                 },
                 "photo_url": {
-                    "description": "the telegram URL, unreachable for our users. Kept as the mirror change signal, not for display.",
                     "type": "string"
                 },
                 "rank": {
-                    "description": "derived from the workout total, not settable",
                     "type": "string"
                 },
                 "sport_emoji": {
                     "type": "string"
                 },
                 "sport_name": {
-                    "description": "what the member trains and how often; empty/nil means the room defaults apply",
                     "type": "string"
                 },
                 "status_emoji": {
-                    "description": "what the member writes about themselves: a single emoji plus a short line",
                     "type": "string"
                 },
                 "status_text": {
@@ -2330,7 +2491,6 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "my_goal": {
-                    "description": "the viewer's personal goal in this room, falling back to the room goal",
                     "type": "integer"
                 },
                 "name": {
@@ -2340,7 +2500,6 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "period_ends_at": {
-                    "description": "when the current period closes and the streak burns unless the goal is met",
                     "type": "string"
                 },
                 "streak": {
@@ -2390,22 +2549,18 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "has_avatar": {
-                    "description": "clients read the bytes from GET /users/{id}/avatar, never from object storage directly",
                     "type": "boolean"
                 },
                 "id": {
                     "type": "integer"
                 },
                 "photo_url": {
-                    "description": "the telegram URL, unreachable for our users. Kept as the mirror change signal, not for display.",
                     "type": "string"
                 },
                 "rank": {
-                    "description": "derived from the workout total, not settable",
                     "type": "string"
                 },
                 "status_emoji": {
-                    "description": "what the member writes about themselves: a single emoji plus a short line",
                     "type": "string"
                 },
                 "status_text": {
@@ -2523,6 +2678,19 @@ const docTemplate = `{
                 }
             }
         },
+        "httpapi.FreezeRequest": {
+            "type": "object",
+            "properties": {
+                "ends_at": {
+                    "type": "string",
+                    "example": "2026-08-05"
+                },
+                "starts_at": {
+                    "type": "string",
+                    "example": "2026-07-25"
+                }
+            }
+        },
         "httpapi.HealthResponse": {
             "type": "object",
             "properties": {
@@ -2557,14 +2725,12 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "achievements": {
-                    "description": "the whole catalog, earned or not: a locked one carries its progress",
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/domain.AchievementProgress"
                     }
                 },
                 "best_streak": {
-                    "description": "highest streak across the user rooms",
                     "type": "integer"
                 },
                 "stats": {

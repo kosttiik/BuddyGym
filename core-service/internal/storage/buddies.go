@@ -17,8 +17,6 @@ func NewBuddies(pool *pgxpool.Pool) *Buddies {
 	return &Buddies{pool: pool}
 }
 
-// Tag records the people who trained with the author. Tagging the same person twice is not an
-// error, so the "add more buddies" button can be pressed as many times as the author likes.
 func (b *Buddies) Tag(ctx context.Context, checkinID string, roomID, authorID int64, userIDs []int64) error {
 	if len(userIDs) == 0 {
 		return nil
@@ -42,7 +40,6 @@ func (b *Buddies) Untag(ctx context.Context, checkinID string, userID int64) err
 	return nil
 }
 
-// UserIDs lists who was tagged on one checkin.
 func (b *Buddies) UserIDs(ctx context.Context, checkinID string) ([]int64, error) {
 	rows, err := b.pool.Query(ctx,
 		"SELECT user_id FROM checkin_buddies WHERE checkin_id = $1 ORDER BY created_at", checkinID)
@@ -52,8 +49,6 @@ func (b *Buddies) UserIDs(ctx context.Context, checkinID string) ([]int64, error
 	return pgx.CollectRows(rows, pgx.RowTo[int64])
 }
 
-// ForCheckins returns the tagged users of every listed checkin, so a whole page of the room
-// feed costs one query rather than one per card.
 func (b *Buddies) ForCheckins(ctx context.Context, checkinIDs []string) (map[string][]domain.User, error) {
 	if len(checkinIDs) == 0 {
 		return map[string][]domain.User{}, nil

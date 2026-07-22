@@ -30,7 +30,6 @@ func (s *Server) internal(w http.ResponseWriter, err error) {
 	writeErr(w, http.StatusInternalServerError, "internal error")
 }
 
-// mapError translates storage and checkin-service gRPC errors to HTTP.
 func (s *Server) mapError(w http.ResponseWriter, err error) {
 	if errors.Is(err, storage.ErrNotFound) {
 		writeErr(w, http.StatusNotFound, "not found")

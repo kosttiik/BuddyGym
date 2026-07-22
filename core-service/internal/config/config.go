@@ -21,17 +21,14 @@ type Config struct {
 }
 
 type S3Config struct {
-	Endpoint  string
-	AccessKey string
-	SecretKey string
-	Bucket    string
-	// comment photos live apart from avatars: they have their own retention
+	Endpoint      string
+	AccessKey     string
+	SecretKey     string
+	Bucket        string
 	CommentBucket string
 	UseSSL        bool
 }
 
-// Enabled reports whether avatar mirroring can run. Without object storage the service still
-// serves everything else, users just fall back to initials.
 func (c S3Config) Enabled() bool {
 	return c.Endpoint != "" && c.AccessKey != "" && c.SecretKey != ""
 }
@@ -45,12 +42,12 @@ func Load() (Config, error) {
 		RedisAddr:   getenv("REDIS_ADDR", "localhost:6379"),
 		CheckinAddr: getenv("CHECKIN_GRPC_ADDR", "localhost:9091"),
 		S3: S3Config{
-			Endpoint:  os.Getenv("S3_ENDPOINT"),
-			AccessKey: os.Getenv("S3_ACCESS_KEY"),
-			SecretKey: os.Getenv("S3_SECRET_KEY"),
+			Endpoint:      os.Getenv("S3_ENDPOINT"),
+			AccessKey:     os.Getenv("S3_ACCESS_KEY"),
+			SecretKey:     os.Getenv("S3_SECRET_KEY"),
 			Bucket:        getenv("S3_AVATAR_BUCKET", "avatars"),
 			CommentBucket: getenv("S3_COMMENT_BUCKET", "comment-photos"),
-			UseSSL:    os.Getenv("S3_USE_SSL") == "true",
+			UseSSL:        os.Getenv("S3_USE_SSL") == "true",
 		},
 	}
 	if cfg.BotToken == "" {

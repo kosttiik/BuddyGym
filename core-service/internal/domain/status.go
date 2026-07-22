@@ -13,20 +13,17 @@ import (
 const MaxStatusTextLen = 60
 
 var (
-	ErrStatusTextTooLong = errors.New("status text must be at most 60 characters")
-	ErrStatusTextInvalid = errors.New("status text must not contain control characters")
+	ErrStatusTextTooLong  = errors.New("status text must be at most 60 characters")
+	ErrStatusTextInvalid  = errors.New("status text must not contain control characters")
 	ErrStatusEmojiInvalid = errors.New("status emoji must be a single emoji")
 )
 
-// NormalizeStatusText trims the line and rejects anything that would break the layout.
-// An empty result clears the status.
 func NormalizeStatusText(text string) (string, error) {
 	text = strings.TrimSpace(text)
 	if uniseg.GraphemeClusterCount(text) > MaxStatusTextLen {
 		return "", ErrStatusTextTooLong
 	}
 	for _, r := range text {
-		// a newline in a one-line chip would either be swallowed or blow up the row
 		if unicode.IsControl(r) {
 			return "", ErrStatusTextInvalid
 		}
@@ -34,9 +31,6 @@ func NormalizeStatusText(text string) (string, error) {
 	return text, nil
 }
 
-// NormalizeStatusEmoji accepts exactly one grapheme cluster that is not plain ASCII.
-// Counting graphemes rather than runes is what makes a flag or a skin-toned emoji, which are
-// several runes glued together, count as the single character the user actually typed.
 func NormalizeStatusEmoji(emoji string) (string, error) {
 	emoji = strings.TrimSpace(emoji)
 	if emoji == "" {
@@ -60,8 +54,6 @@ var (
 	ErrCommentTooLong = errors.New("comment must be at most 500 characters")
 )
 
-// NormalizeCommentBody allows an empty body when a photo carries the comment: a meme needs
-// no caption.
 func NormalizeCommentBody(body string, hasPhoto bool) (string, error) {
 	body = strings.TrimSpace(body)
 	if body == "" && !hasPhoto {

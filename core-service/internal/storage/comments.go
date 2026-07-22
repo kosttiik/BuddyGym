@@ -19,7 +19,6 @@ func NewComments(pool *pgxpool.Pool) *Comments {
 	return &Comments{pool: pool}
 }
 
-// The viewer id is $2 everywhere below: it decides whether the heart comes back filled.
 const commentColumns = `
 	c.id, c.checkin_id, c.user_id, c.body, c.photo_key, c.created_at,
 	u.first_name, u.username, u.photo_url, u.avatar_key,
@@ -82,8 +81,6 @@ func (r *Comments) List(ctx context.Context, checkinID string, viewerID int64, l
 	return out, rows.Err()
 }
 
-// Delete removes a comment and reports the photo it carried, so the caller can drop the object
-// too. The author can delete their own; the room creator can delete any.
 func (r *Comments) Delete(ctx context.Context, id, userID int64) (photoKey string, err error) {
 	err = r.pool.QueryRow(ctx, `
 		DELETE FROM checkin_comments c
@@ -111,8 +108,6 @@ func (r *Comments) Unlike(ctx context.Context, commentID, userID int64) error {
 	return err
 }
 
-// Summaries returns, for every listed checkin, the comment count and the most liked comment.
-// The feed shows that one over the photo, so the card never has to fetch the whole thread.
 func (r *Comments) Summaries(ctx context.Context, checkinIDs []string, viewerID int64) (map[string]domain.CommentSummary, error) {
 	out := map[string]domain.CommentSummary{}
 	if len(checkinIDs) == 0 {
@@ -141,7 +136,6 @@ func (r *Comments) Summaries(ctx context.Context, checkinIDs []string, viewerID 
 		return nil, err
 	}
 
-	// most liked wins, the oldest breaks a tie: the comment the room has had longest to react to
 	top, err := r.pool.Query(ctx, `
 		SELECT DISTINCT ON (c.checkin_id) `+commentColumns+`
 		FROM checkin_comments c JOIN users u ON u.id = c.user_id
@@ -166,8 +160,6 @@ func (r *Comments) Summaries(ctx context.Context, checkinIDs []string, viewerID 
 	return out, top.Err()
 }
 
-// ExpiredPhotos lists the comment photos past the retention window, so the reaper can drop the
-// objects and clear the keys.
 func (r *Comments) ExpiredPhotos(ctx context.Context, before time.Time, limit int) ([]int64, []string, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, photo_key FROM checkin_comments

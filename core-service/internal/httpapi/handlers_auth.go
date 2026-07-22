@@ -17,20 +17,18 @@ type AuthTelegramResponse struct {
 	User  domain.User `json:"user"`
 }
 
-// handleAuthTelegram godoc
-//
-//	@Summary		Exchange Telegram initData for a JWT
-//	@Description	Validates Mini App initData signature, upserts the user and issues a Bearer token for all other endpoints.
-//	@Tags			auth
-//	@Accept			json
-//	@Produce		json
-//	@Param			body	body		AuthTelegramRequest	true	"raw initData string"
-//	@Success		200		{object}	AuthTelegramResponse
-//	@Failure		400		{object}	ErrorResponse
-//	@Failure		401		{object}	ErrorResponse
-//	@Failure		429		{object}	ErrorResponse
-//	@Failure		500		{object}	ErrorResponse
-//	@Router			/auth/telegram [post]
+// @Summary		Exchange Telegram initData for a JWT
+// @Description	Validates Mini App initData signature, upserts the user and issues a Bearer token for all other endpoints.
+// @Tags			auth
+// @Accept			json
+// @Produce		json
+// @Param			body	body		AuthTelegramRequest	true	"raw initData string"
+// @Success		200		{object}	AuthTelegramResponse
+// @Failure		400		{object}	ErrorResponse
+// @Failure		401		{object}	ErrorResponse
+// @Failure		429		{object}	ErrorResponse
+// @Failure		500		{object}	ErrorResponse
+// @Router			/auth/telegram [post]
 func (s *Server) handleAuthTelegram(w http.ResponseWriter, r *http.Request) {
 	if !s.allow(w, r, s.authLimiter, clientIP(r)) {
 		return
