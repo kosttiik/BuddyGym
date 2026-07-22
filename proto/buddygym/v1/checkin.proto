@@ -17,6 +17,9 @@ service CheckinService {
   rpc GetCheckinPhoto(GetCheckinPhotoRequest) returns (stream CheckinPhotoChunk);
   // core calls this when a room is gone for good
   rpc PurgeRoom(PurgeRoomRequest) returns (PurgeRoomResponse);
+  // core calls this when the room's votes_required changes: pending checkins get the new
+  // quorum and are re-finalized against the votes they already hold
+  rpc SyncRoomVotesRequired(SyncRoomVotesRequiredRequest) returns (SyncRoomVotesRequiredResponse);
 }
 
 enum CheckinStatus {
@@ -123,4 +126,16 @@ message PurgeRoomResponse {
   int32 checkins_deleted = 1;
   // a shared photo is kept while any checkin in another room still points at it
   int32 photos_deleted = 2;
+}
+
+message SyncRoomVotesRequiredRequest {
+  int64 room_id = 1;
+  int32 votes_required = 2;
+}
+
+message SyncRoomVotesRequiredResponse {
+  // pending checkins that got the new quorum
+  int32 updated = 1;
+  // of those, how many finalized right away
+  int32 finalized = 2;
 }

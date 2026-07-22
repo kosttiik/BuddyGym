@@ -165,12 +165,19 @@ func (s *Server) handleUpdateRoom(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, msg)
 		return
 	}
+	votesChanged := room.VotesRequired != req.VotesRequired
 	room.Name, room.Kind = req.Name, req.Kind
 	room.GoalPerPeriod, room.PeriodDays, room.VotesRequired = req.GoalPerPeriod, req.PeriodDays, req.VotesRequired
 	updated, err := s.rooms.Update(r.Context(), room)
 	if err != nil {
 		s.mapError(w, err)
 		return
+	}
+	if votesChanged {
+		// best effort: pending checkins keep the old quorum until the next vote if this fails
+		if err := s.checkins.SyncVotesRequired(r.Context(), updated.ID, updated.VotesRequired); err != nil {
+			s.log.Error("sync votes_required", "err", err, "room_id", updated.ID)
+		}
 	}
 	writeJSON(w, http.StatusOK, updated)
 }

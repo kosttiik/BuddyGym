@@ -203,3 +203,10 @@ func (c *Client) PurgeRoom(ctx context.Context, roomID int64) error {
 	_, err := c.api.PurgeRoom(ctx, &pbv1.PurgeRoomRequest{RoomId: roomID})
 	return err
 }
+
+func (c *Client) SyncVotesRequired(ctx context.Context, roomID int64, votesRequired int) error {
+	_, err := c.api.SyncRoomVotesRequired(ctx, &pbv1.SyncRoomVotesRequiredRequest{
+		RoomId: roomID, VotesRequired: int32(votesRequired),
+	})
+	return err
+}

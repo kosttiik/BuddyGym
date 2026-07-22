@@ -513,6 +513,7 @@ type fakeCheckins struct {
 	photos    map[string][]byte
 	photoKeys map[string]string
 	nextPhoto int
+	synced    map[int64]int
 }
 
 func newFakeCheckins() *fakeCheckins {
@@ -552,6 +553,17 @@ func (f *fakeCheckins) Create(_ context.Context, userID int64, targets []checkin
 		out = append(out, c)
 	}
 	return out, nil
+}
+
+func (f *fakeCheckins) SyncVotesRequired(_ context.Context, roomID int64, votesRequired int) error {
+	if f.err != nil {
+		return f.err
+	}
+	if f.synced == nil {
+		f.synced = map[int64]int{}
+	}
+	f.synced[roomID] = votesRequired
+	return nil
 }
 
 func (f *fakeCheckins) OpenPhoto(_ context.Context, checkinID string) (checkin.Photo, error) {

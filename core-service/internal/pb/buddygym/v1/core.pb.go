@@ -30,8 +30,7 @@ type ApplyCheckinResultRequest struct {
 	RoomId    int64         `protobuf:"varint,2,opt,name=room_id,json=roomId,proto3" json:"room_id,omitempty"`
 	UserId    int64         `protobuf:"varint,3,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	Status    CheckinStatus `protobuf:"varint,4,opt,name=status,proto3,enum=buddygym.v1.CheckinStatus" json:"status,omitempty"`
-	// when the workout was logged, not when voting finished. core buckets days by this,
-	// so a workout logged late at night is not credited to the next day.
+	// when the workout was logged, not when voting finished: core buckets days by this
 	CheckinCreatedAt *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=checkin_created_at,json=checkinCreatedAt,proto3" json:"checkin_created_at,omitempty"`
 }
 

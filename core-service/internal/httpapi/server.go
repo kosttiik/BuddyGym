@@ -85,6 +85,7 @@ type CheckinClient interface {
 	List(ctx context.Context, roomID int64, status pbv1.CheckinStatus, limit, offset int32) ([]checkin.Checkin, error)
 	Vote(ctx context.Context, checkinID string, voterID int64, approve bool) (checkin.Checkin, error)
 	OpenPhoto(ctx context.Context, checkinID string) (checkin.Photo, error)
+	SyncVotesRequired(ctx context.Context, roomID int64, votesRequired int) error
 }
 
 type FreezesRepo interface {

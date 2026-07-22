@@ -1206,3 +1206,27 @@ func TestFreezeLifecycle(t *testing.T) {
 		t.Errorf("cancel again: %d, want 404", rec.Code)
 	}
 }
+
+func TestUpdateRoomSyncsVotesRequired(t *testing.T) {
+	e := newEnv()
+	room := e.createRoom(t, 1, domain.RoomOpen)
+	path := fmt.Sprintf("/api/v1/rooms/%d", room.ID)
+
+	req := httpapi.UpdateRoomRequest{Name: "room", Kind: domain.RoomOpen,
+		GoalPerPeriod: 3, PeriodDays: 7, VotesRequired: 1}
+	if rec := e.do(t, "PATCH", path, req, reqOpts{userID: 1}); rec.Code != http.StatusOK {
+		t.Fatalf("update room: %d %s", rec.Code, rec.Body.String())
+	}
+	if got := e.checkins.synced[room.ID]; got != 1 {
+		t.Errorf("synced votes = %d, want 1", got)
+	}
+
+	e.checkins.synced = nil
+	req.Name = "renamed"
+	if rec := e.do(t, "PATCH", path, req, reqOpts{userID: 1}); rec.Code != http.StatusOK {
+		t.Fatalf("rename: %d", rec.Code)
+	}
+	if e.checkins.synced != nil {
+		t.Error("sync must not fire when votes_required is unchanged")
+	}
+}
