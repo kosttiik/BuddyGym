@@ -63,6 +63,19 @@ func (req *CreateRoomRequest) validate() string {
 	return ""
 }
 
+// joinRoom reports whether this call actually enrolled the user: Join is idempotent,
+// and rejoining must not fire a second event.
+func (s *Server) joinRoom(r *http.Request, roomID, userID int64) (bool, error) {
+	member, err := s.rooms.IsMember(r.Context(), roomID, userID)
+	if err != nil {
+		return false, err
+	}
+	if err := s.rooms.Join(r.Context(), roomID, userID); err != nil {
+		return false, err
+	}
+	return !member, nil
+}
+
 func roomID(r *http.Request) (int64, bool) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	return id, err == nil && id > 0
@@ -398,9 +411,14 @@ func (s *Server) handleJoinRoom(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusForbidden, "room is invite-only")
 		return
 	}
-	if err := s.rooms.Join(r.Context(), room.ID, userFrom(r.Context()).ID); err != nil {
+	userID := userFrom(r.Context()).ID
+	joined, err := s.joinRoom(r, room.ID, userID)
+	if err != nil {
 		s.internal(w, err)
 		return
+	}
+	if joined {
+		s.emit(r.Context(), "member.joined", room.ID, userID, nil)
 	}
 	writeJSON(w, http.StatusOK, room)
 }
@@ -433,9 +451,14 @@ func (s *Server) handleJoinByCode(w http.ResponseWriter, r *http.Request) {
 		s.mapError(w, err)
 		return
 	}
-	if err := s.rooms.Join(r.Context(), room.ID, userFrom(r.Context()).ID); err != nil {
+	userID := userFrom(r.Context()).ID
+	joined, err := s.joinRoom(r, room.ID, userID)
+	if err != nil {
 		s.internal(w, err)
 		return
+	}
+	if joined {
+		s.emit(r.Context(), "member.joined", room.ID, userID, nil)
 	}
 	writeJSON(w, http.StatusOK, room)
 }

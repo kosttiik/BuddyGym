@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -834,5 +835,77 @@ func TestFreezesStorage(t *testing.T) {
 	}
 	if err := freezes.Cancel(ctx, room.ID, 112, time.Now()); err != storage.ErrNotFound {
 		t.Errorf("second cancel = %v, want ErrNotFound", err)
+	}
+}
+
+func TestEventsAddAndBackfill(t *testing.T) {
+	ctx := context.Background()
+	events := storage.NewEvents(pool(t))
+
+	if err := events.Add(ctx, "comment.created", 1, 2, map[string]any{"comment_id": 7}); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+
+	var typ string
+	var roomID, actorID int64
+	var subject []byte
+	err := pool(t).QueryRow(ctx, `
+		SELECT type, room_id, actor_id, subject FROM events
+		WHERE type = 'comment.created' AND room_id = 1 AND actor_id = 2
+		ORDER BY id DESC LIMIT 1`).Scan(&typ, &roomID, &actorID, &subject)
+	if err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if !strings.Contains(string(subject), `"comment_id": 7`) {
+		t.Errorf("subject = %s", subject)
+	}
+
+}
+
+// The 0013 backfill runs against an empty database in tests, so replay its statements over
+// seeded rows to prove the bot gets what happened before the outbox existed.
+func TestEventsBackfillCoversExistingRows(t *testing.T) {
+	ctx := context.Background()
+	comments := storage.NewComments(pool(t))
+	results := storage.NewResults(pool(t))
+	mustUser(t, 113)
+	room := mustRoom(t, 113)
+
+	if _, err := comments.Add(ctx, "chk-backfill", room.ID, 113, "old comment", ""); err != nil {
+		t.Fatalf("seed comment: %v", err)
+	}
+	if _, err := results.Apply(ctx, "chk-backfill", room.ID, 113, storage.ResultApproved, time.Now()); err != nil {
+		t.Fatalf("seed result: %v", err)
+	}
+
+	raw, err := os.ReadFile("migrations/0013_events.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	up, _, _ := strings.Cut(string(raw), "-- +goose Down")
+	replayed := 0
+	for _, stmt := range strings.Split(up, ";") {
+		if !strings.Contains(stmt, "INSERT INTO events") {
+			continue
+		}
+		if _, err := pool(t).Exec(ctx, stmt); err != nil {
+			t.Fatalf("replay backfill: %v\n%s", err, stmt)
+		}
+		replayed++
+	}
+	if replayed != 3 {
+		t.Fatalf("replayed %d backfill statements, want 3", replayed)
+	}
+
+	for _, want := range []string{"comment.created", "checkin.approved", "member.joined"} {
+		var n int
+		if err := pool(t).QueryRow(ctx,
+			"SELECT count(*) FROM events WHERE type = $1 AND room_id = $2 AND actor_id = 113",
+			want, room.ID).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		if n == 0 {
+			t.Errorf("backfill produced no %s event", want)
+		}
 	}
 }

@@ -653,3 +653,27 @@ func (f *fakeFreezes) Cancel(_ context.Context, roomID, userID int64, at time.Ti
 func (f *fakeFreezes) ListByMember(_ context.Context, roomID, userID int64) ([]domain.Freeze, error) {
 	return f.freezes[[2]int64{roomID, userID}], nil
 }
+
+type recordedEvent struct {
+	Type    string
+	RoomID  int64
+	ActorID int64
+	Subject map[string]any
+}
+
+type fakeEvents struct {
+	events []recordedEvent
+}
+
+func (f *fakeEvents) Add(_ context.Context, eventType string, roomID, actorID int64, subject map[string]any) error {
+	f.events = append(f.events, recordedEvent{eventType, roomID, actorID, subject})
+	return nil
+}
+
+func (f *fakeEvents) types() []string {
+	out := make([]string, 0, len(f.events))
+	for _, e := range f.events {
+		out = append(out, e.Type)
+	}
+	return out
+}

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -28,6 +29,16 @@ func writeErr(w http.ResponseWriter, code int, msg string) {
 func (s *Server) internal(w http.ResponseWriter, err error) {
 	s.log.Error("internal error", "err", err)
 	writeErr(w, http.StatusInternalServerError, "internal error")
+}
+
+// emit records an outbox event for the notification bot. A failure here must not fail the request.
+func (s *Server) emit(ctx context.Context, eventType string, roomID, actorID int64, subject map[string]any) {
+	if s.events == nil {
+		return
+	}
+	if err := s.events.Add(ctx, eventType, roomID, actorID, subject); err != nil {
+		s.log.Error("emit event", "err", err, "type", eventType)
+	}
 }
 
 func (s *Server) mapError(w http.ResponseWriter, err error) {

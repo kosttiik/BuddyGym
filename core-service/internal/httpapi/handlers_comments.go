@@ -164,6 +164,12 @@ func (s *Server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, err)
 		return
 	}
+	s.emit(r.Context(), "comment.created", target.RoomID, user.ID, map[string]any{
+		"checkin_id": target.ID,
+		"comment_id": comment.ID,
+		"body":       comment.Body,
+		"has_photo":  comment.HasPhoto,
+	})
 	writeJSON(w, http.StatusCreated, comment)
 }
 

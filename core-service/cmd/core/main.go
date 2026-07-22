@@ -140,6 +140,7 @@ func run(log *slog.Logger) error {
 	checkinClient := checkin.NewClient(conn)
 	results := storage.NewResults(pool)
 	freezes := storage.NewFreezes(pool)
+	events := storage.NewEvents(pool)
 	buddies := storage.NewBuddies(pool)
 	comments := storage.NewComments(pool)
 
@@ -168,6 +169,7 @@ func run(log *slog.Logger) error {
 		Users:          users,
 		Rooms:          rooms,
 		Freezes:        freezes,
+		Events:         events,
 		Streaks:        results,
 		Buddies:        buddies,
 		Comments:       comments,
@@ -200,7 +202,7 @@ func run(log *slog.Logger) error {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	grpcSrv := grpc.NewServer()
-	pbv1.RegisterCoreInternalServiceServer(grpcSrv, grpcserver.New(users, rooms, results, buddies, log))
+	pbv1.RegisterCoreInternalServiceServer(grpcSrv, grpcserver.New(users, rooms, results, buddies, events, log))
 	reflection.Register(grpcSrv)
 
 	reaper := roomreaper.New(roomreaper.Options{
