@@ -2,7 +2,6 @@ package domain
 
 import "time"
 
-// Stats is everything the achievement catalog can be measured against.
 type Stats struct {
 	TotalWorkouts int `json:"total_workouts"`
 	BestStreak    int `json:"best_streak"`
@@ -67,11 +66,7 @@ type AchievementSpec struct {
 	Target int
 }
 
-// Catalog is the whole achievement set. Adding one is a line here: the grant path folds over
-// this list and never needs touching again.
-//
 // ponytail: a "finished first in a room period" achievement needs a period-close snapshot job,
-// so it is deliberately not here yet.
 var Catalog = []AchievementSpec{
 	{AchFirstCheckin, MetricWorkouts, 1},
 	{AchWorkouts10, MetricWorkouts, 10},
@@ -88,8 +83,6 @@ var Catalog = []AchievementSpec{
 	{AchNightOwl10, MetricLateWorkouts, 10},
 }
 
-// EarnedAchievements returns every achievement the stats qualify for. Already granted ones are
-// filtered out by the storage layer on insert.
 func EarnedAchievements(stats Stats) []string {
 	var keys []string
 	for _, spec := range Catalog {
@@ -100,8 +93,6 @@ func EarnedAchievements(stats Stats) []string {
 	return keys
 }
 
-// AchievementProgress is one catalog entry as the profile shows it: how far along, and when it
-// was earned if it was.
 type AchievementProgress struct {
 	Key       string     `json:"key"`
 	Current   int        `json:"current"`
@@ -109,8 +100,6 @@ type AchievementProgress struct {
 	GrantedAt *time.Time `json:"granted_at,omitempty"`
 }
 
-// Progress folds the catalog against the stats. Every key comes back, earned or not: a locked
-// tile showing real progress beats a dead grey square.
 func Progress(stats Stats, granted []Achievement) []AchievementProgress {
 	grantedAt := make(map[string]time.Time, len(granted))
 	for _, a := range granted {
@@ -126,7 +115,6 @@ func Progress(stats Stats, granted []Achievement) []AchievementProgress {
 		}
 		if at, ok := grantedAt[spec.Key]; ok {
 			p.GrantedAt = &at
-			// a granted one is complete even if the metric later moved
 			p.Current = spec.Target
 		}
 		out = append(out, p)

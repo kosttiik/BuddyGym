@@ -48,7 +48,6 @@ type AvatarStore interface {
 	Delete(ctx context.Context, key string) error
 }
 
-// AvatarMirror refreshes a mirrored avatar when Telegram reports a new photo_url.
 type AvatarMirror interface {
 	SyncInBackground(userID int64, photoURL, mirroredFrom string)
 }
@@ -88,6 +87,12 @@ type CheckinClient interface {
 	OpenPhoto(ctx context.Context, checkinID string) (checkin.Photo, error)
 }
 
+type FreezesRepo interface {
+	Create(ctx context.Context, roomID, userID int64, startsAt, endsAt time.Time) (domain.Freeze, error)
+	Cancel(ctx context.Context, roomID, userID int64, at time.Time) error
+	ListByMember(ctx context.Context, roomID, userID int64) ([]domain.Freeze, error)
+}
+
 type PingFunc func(ctx context.Context) error
 
 type RateLimiter interface {
@@ -95,23 +100,22 @@ type RateLimiter interface {
 }
 
 type Server struct {
-	users         UsersRepo
-	rooms         RoomsRepo
-	streaks       StreaksRepo
-	buddies       BuddiesRepo
-	comments      CommentsRepo
-	commentPhotos ObjectStore
-	checkins      CheckinClient
-	avatars       AvatarStore
-	avatarMirror  AvatarMirror
-	botToken      string
-	authTTL       time.Duration
-	jwtSecret     []byte
-	jwtTTL        time.Duration
-	authLimiter   RateLimiter
-	apiLimiter    RateLimiter
-	// checkin creation is the expensive path: it ships a photo over gRPC and into
-	// object storage, so it gets its own tighter per-user budget
+	users          UsersRepo
+	rooms          RoomsRepo
+	freezes        FreezesRepo
+	streaks        StreaksRepo
+	buddies        BuddiesRepo
+	comments       CommentsRepo
+	commentPhotos  ObjectStore
+	checkins       CheckinClient
+	avatars        AvatarStore
+	avatarMirror   AvatarMirror
+	botToken       string
+	authTTL        time.Duration
+	jwtSecret      []byte
+	jwtTTL         time.Duration
+	authLimiter    RateLimiter
+	apiLimiter     RateLimiter
 	checkinLimiter RateLimiter
 	dbPing         PingFunc
 	redisPing      PingFunc
@@ -122,6 +126,7 @@ type Server struct {
 type Options struct {
 	Users          UsersRepo
 	Rooms          RoomsRepo
+	Freezes        FreezesRepo
 	Streaks        StreaksRepo
 	Buddies        BuddiesRepo
 	Comments       CommentsRepo
@@ -152,6 +157,7 @@ func New(opts Options) *Server {
 	return &Server{
 		users:          opts.Users,
 		rooms:          opts.Rooms,
+		freezes:        opts.Freezes,
 		streaks:        opts.Streaks,
 		buddies:        opts.Buddies,
 		comments:       opts.Comments,
@@ -197,6 +203,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/rooms/{id}/avatars/{avatarId}", s.withAuth(s.handleGetRoomAvatarByID))
 	mux.HandleFunc("DELETE /api/v1/rooms/{id}/avatars/{avatarId}", s.withAuth(s.handleDeleteRoomAvatar))
 	mux.HandleFunc("PATCH /api/v1/rooms/{id}/membership", s.withAuth(s.handleUpdateMembership))
+	mux.HandleFunc("POST /api/v1/rooms/{id}/freeze", s.withAuth(s.handleCreateFreeze))
+	mux.HandleFunc("DELETE /api/v1/rooms/{id}/freeze", s.withAuth(s.handleCancelFreeze))
 	mux.HandleFunc("POST /api/v1/rooms/join", s.withAuth(s.handleJoinByCode))
 	mux.HandleFunc("POST /api/v1/rooms/{id}/join", s.withAuth(s.handleJoinRoom))
 	mux.HandleFunc("POST /api/v1/rooms/{id}/leave", s.withAuth(s.handleLeaveRoom))

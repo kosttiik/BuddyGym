@@ -40,14 +40,11 @@ func NewMirror(users UsersRepo, telegram Fetcher, store Uploader, log *slog.Logg
 	return &Mirror{users: users, telegram: telegram, store: store, log: log}
 }
 
-// Sync refreshes the mirrored avatar when Telegram reports a photo_url we have not mirrored yet.
-// photoURL is only a change signal, never fetched: it points at a host our network cannot reach.
 func (m *Mirror) Sync(ctx context.Context, userID int64, photoURL, mirroredFrom string) error {
 	if photoURL == mirroredFrom {
 		return nil
 	}
 	if photoURL == "" {
-		// the user removed their picture: drop ours too
 		return m.users.SetAvatar(ctx, userID, "", "")
 	}
 
@@ -66,8 +63,6 @@ func (m *Mirror) Sync(ctx context.Context, userID int64, photoURL, mirroredFrom 
 	return m.users.SetAvatar(ctx, userID, key, photoURL)
 }
 
-// SyncInBackground keeps login fast: a Telegram round trip must not sit in the auth path.
-// The request context dies with the response, so the work gets a fresh one.
 func (m *Mirror) SyncInBackground(userID int64, photoURL, mirroredFrom string) {
 	if photoURL == mirroredFrom {
 		return

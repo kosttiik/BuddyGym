@@ -14,20 +14,18 @@ type UserProfileResponse struct {
 	BestStreak   int                          `json:"best_streak"`
 }
 
-// handleGetUser godoc
-//
-//	@Summary		Get a user profile
-//	@Description	Public profile of any user by id, with achievements.
-//	@Tags			users
-//	@Security		BearerAuth
-//	@Produce		json
-//	@Param			id	path		int	true	"user id"
-//	@Success		200	{object}	UserProfileResponse
-//	@Failure		400	{object}	ErrorResponse
-//	@Failure		401	{object}	ErrorResponse
-//	@Failure		404	{object}	ErrorResponse
-//	@Failure		500	{object}	ErrorResponse
-//	@Router			/users/{id} [get]
+// @Summary		Get a user profile
+// @Description	Public profile of any user by id, with achievements.
+// @Tags			users
+// @Security		BearerAuth
+// @Produce		json
+// @Param			id	path		int	true	"user id"
+// @Success		200	{object}	UserProfileResponse
+// @Failure		400	{object}	ErrorResponse
+// @Failure		401	{object}	ErrorResponse
+// @Failure		404	{object}	ErrorResponse
+// @Failure		500	{object}	ErrorResponse
+// @Router			/users/{id} [get]
 func (s *Server) handleGetUser(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil || id <= 0 {

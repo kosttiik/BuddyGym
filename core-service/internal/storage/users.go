@@ -32,7 +32,6 @@ func scanUser(row pgx.Row) (domain.User, error) {
 	return u, err
 }
 
-// Upsert keeps telegram profile fields fresh on every authenticated request.
 func (r *Users) Upsert(ctx context.Context, id int64, username, firstName, photoURL string) (domain.User, error) {
 	return scanUser(r.pool.QueryRow(ctx, `
 		INSERT INTO users (id, username, first_name, photo_url)
@@ -53,8 +52,6 @@ func (r *Users) UpdateTheme(ctx context.Context, id int64, theme string) (domain
 		"UPDATE users SET theme = $2 WHERE id = $1 RETURNING "+userColumns, id, theme))
 }
 
-// PendingAvatars lists users whose telegram picture has not been mirrored yet.
-// Their id and photo_url is all the mirror needs.
 func (r *Users) PendingAvatars(ctx context.Context) ([]domain.User, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, photo_url, avatar_source FROM users
@@ -87,7 +84,6 @@ func (r *Users) SetRank(ctx context.Context, id int64, rank string) error {
 	return err
 }
 
-// SetStatus writes the member's own status line. Empty strings clear it.
 func (r *Users) SetStatus(ctx context.Context, id int64, emoji, text string) (domain.User, error) {
 	return scanUser(r.pool.QueryRow(ctx,
 		"UPDATE users SET status_emoji = $2, status_text = $3 WHERE id = $1 RETURNING "+userColumns,
@@ -103,7 +99,6 @@ func (r *Users) Achievements(ctx context.Context, userID int64) ([]domain.Achiev
 	return pgx.CollectRows(rows, pgx.RowToStructByPos[domain.Achievement])
 }
 
-// Grant inserts keys and returns only the newly granted ones.
 func (r *Users) Grant(ctx context.Context, userID int64, keys []string) ([]string, error) {
 	if len(keys) == 0 {
 		return nil, nil
@@ -119,7 +114,6 @@ func (r *Users) Grant(ctx context.Context, userID int64, keys []string) ([]strin
 	return pgx.CollectRows(rows, pgx.RowTo[string])
 }
 
-// prefixed qualifies a column list with a table alias, so userColumns can be reused inside a join.
 func prefixed(alias, columns string) string {
 	parts := strings.Split(columns, ", ")
 	for i, c := range parts {
@@ -128,8 +122,6 @@ func prefixed(alias, columns string) string {
 	return strings.Join(parts, ", ")
 }
 
-// Stats gathers every metric the achievement catalog measures against, in one round trip.
-// Early and late workouts are bucketed in UTC: the app has no per-user timezone yet.
 func (r *Users) Stats(ctx context.Context, userID int64) (domain.Stats, error) {
 	var s domain.Stats
 	err := r.pool.QueryRow(ctx, `

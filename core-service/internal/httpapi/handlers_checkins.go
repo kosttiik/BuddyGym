@@ -26,8 +26,6 @@ var allowedPhotoTypes = map[string]bool{
 	"image/heic": true,
 }
 
-// isImage sniffs magic bytes. A client-declared content type proves nothing, and an
-// SVG or HTML payload stored as a "photo" would be served back as active content.
 func isImage(b []byte) bool {
 	switch {
 	case bytes.HasPrefix(b, []byte("\xff\xd8\xff")):
@@ -54,27 +52,25 @@ type VoteRequest struct {
 	Approve bool `json:"approve" example:"true"`
 }
 
-// handleCreateCheckin godoc
-//
-//	@Summary		Create a checkin in one or more rooms
-//	@Description	Submits one workout proof to every listed room. A photo is uploaded once and shared by all of them, so posting to several rooms never stores it twice. Send multipart/form-data with a "photo" file (up to 10 MB) and repeated "room_ids" fields, or JSON with a geo point and room_ids for the fast path. The caller must be a member of every room.
-//	@Tags			checkins
-//	@Security		BearerAuth
-//	@Accept			mpfd
-//	@Accept			json
-//	@Produce		json
-//	@Param			photo		formData	file					false	"workout photo"
-//	@Param			room_ids	formData	[]int					false	"rooms to submit to"
-//	@Param			buddy_ids	formData	[]int					false	"members who trained with you"
-//	@Param			body		body		CreateCheckinGeoRequest	false	"geo proof (json variant)"
-//	@Success		201			{array}		checkin.Checkin
-//	@Failure		400			{object}	ErrorResponse
-//	@Failure		401			{object}	ErrorResponse
-//	@Failure		403			{object}	ErrorResponse
-//	@Failure		404			{object}	ErrorResponse
-//	@Failure		429			{object}	ErrorResponse
-//	@Failure		502			{object}	ErrorResponse
-//	@Router			/checkins [post]
+// @Summary		Create a checkin in one or more rooms
+// @Description	Submits one workout proof to every listed room. A photo is uploaded once and shared by all of them, so posting to several rooms never stores it twice. Send multipart/form-data with a "photo" file (up to 10 MB) and repeated "room_ids" fields, or JSON with a geo point and room_ids for the fast path. The caller must be a member of every room.
+// @Tags			checkins
+// @Security		BearerAuth
+// @Accept			mpfd
+// @Accept			json
+// @Produce		json
+// @Param			photo		formData	file					false	"workout photo"
+// @Param			room_ids	formData	[]int					false	"rooms to submit to"
+// @Param			buddy_ids	formData	[]int					false	"members who trained with you"
+// @Param			body		body		CreateCheckinGeoRequest	false	"geo proof (json variant)"
+// @Success		201			{array}		checkin.Checkin
+// @Failure		400			{object}	ErrorResponse
+// @Failure		401			{object}	ErrorResponse
+// @Failure		403			{object}	ErrorResponse
+// @Failure		404			{object}	ErrorResponse
+// @Failure		429			{object}	ErrorResponse
+// @Failure		502			{object}	ErrorResponse
+// @Router			/checkins [post]
 func (s *Server) handleCreateCheckin(w http.ResponseWriter, r *http.Request) {
 	user := userFrom(r.Context())
 	if !s.allow(w, r, s.checkinLimiter, strconv.FormatInt(user.ID, 10)) {
@@ -156,8 +152,6 @@ func (s *Server) handleCreateCheckin(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, s.enrichBuddies(r, created))
 }
 
-// resolveTargets rejects the whole request unless the caller is a member of every
-// room, so a checkin can never be planted in a room the user does not belong to.
 func (s *Server) resolveTargets(w http.ResponseWriter, r *http.Request, roomIDs []int64) ([]checkin.Target, bool) {
 	if len(roomIDs) == 0 || len(roomIDs) > maxCheckinRooms {
 		writeErr(w, http.StatusBadRequest, "room_ids must list 1.."+strconv.Itoa(maxCheckinRooms)+" rooms")
@@ -215,21 +209,19 @@ func parseIDs(values []string, field string) ([]int64, error) {
 	return ids, nil
 }
 
-// handleGetCheckinPhoto godoc
-//
-//	@Summary		Download a checkin photo
-//	@Description	Streams the proof photo. The object storage bucket is private: only members of the room the checkin belongs to can read it, and the bytes are proxied through core-service. Requires a Bearer token, so browsers must fetch it via XHR rather than a plain <img src>.
-//	@Tags			checkins
-//	@Security		BearerAuth
-//	@Produce		image/jpeg
-//	@Produce		image/png
-//	@Param			id	path		string	true	"checkin id"
-//	@Success		200	{file}		binary
-//	@Failure		401	{object}	ErrorResponse
-//	@Failure		403	{object}	ErrorResponse
-//	@Failure		404	{object}	ErrorResponse
-//	@Failure		502	{object}	ErrorResponse
-//	@Router			/checkins/{id}/photo [get]
+// @Summary		Download a checkin photo
+// @Description	Streams the proof photo. The object storage bucket is private: only members of the room the checkin belongs to can read it, and the bytes are proxied through core-service. Requires a Bearer token, so browsers must fetch it via XHR rather than a plain <img src>.
+// @Tags			checkins
+// @Security		BearerAuth
+// @Produce		image/jpeg
+// @Produce		image/png
+// @Param			id	path		string	true	"checkin id"
+// @Success		200	{file}		binary
+// @Failure		401	{object}	ErrorResponse
+// @Failure		403	{object}	ErrorResponse
+// @Failure		404	{object}	ErrorResponse
+// @Failure		502	{object}	ErrorResponse
+// @Router			/checkins/{id}/photo [get]
 func (s *Server) handleGetCheckinPhoto(w http.ResponseWriter, r *http.Request) {
 	checkinID := r.PathValue("id")
 	if checkinID == "" {
@@ -268,7 +260,6 @@ func (s *Server) handleGetCheckinPhoto(w http.ResponseWriter, r *http.Request) {
 		contentType = "application/octet-stream"
 	}
 	w.Header().Set("Content-Type", contentType)
-	// never let a browser sniff these bytes into something executable
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Content-Disposition", "inline")
 	w.Header().Set("Cache-Control", "private, max-age=300")
@@ -277,23 +268,21 @@ func (s *Server) handleGetCheckinPhoto(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleListCheckins godoc
-//
-//	@Summary		List room checkins
-//	@Tags			checkins
-//	@Security		BearerAuth
-//	@Produce		json
-//	@Param			id		path		int		true	"room id"
-//	@Param			status	query		string	false	"filter by status"	Enums(pending, approved, rejected, expired)
-//	@Param			limit	query		int		false	"page size, default 20, max 100"
-//	@Param			offset	query		int		false	"page offset"
-//	@Success		200		{array}		checkin.Checkin
-//	@Failure		400		{object}	ErrorResponse
-//	@Failure		401		{object}	ErrorResponse
-//	@Failure		403		{object}	ErrorResponse
-//	@Failure		404		{object}	ErrorResponse
-//	@Failure		502		{object}	ErrorResponse
-//	@Router			/rooms/{id}/checkins [get]
+// @Summary		List room checkins
+// @Tags			checkins
+// @Security		BearerAuth
+// @Produce		json
+// @Param			id		path		int		true	"room id"
+// @Param			status	query		string	false	"filter by status"	Enums(pending, approved, rejected, expired)
+// @Param			limit	query		int		false	"page size, default 20, max 100"
+// @Param			offset	query		int		false	"page offset"
+// @Success		200		{array}		checkin.Checkin
+// @Failure		400		{object}	ErrorResponse
+// @Failure		401		{object}	ErrorResponse
+// @Failure		403		{object}	ErrorResponse
+// @Failure		404		{object}	ErrorResponse
+// @Failure		502		{object}	ErrorResponse
+// @Router			/rooms/{id}/checkins [get]
 func (s *Server) handleListCheckins(w http.ResponseWriter, r *http.Request) {
 	room, ok := s.membership(w, r)
 	if !ok {
@@ -327,24 +316,22 @@ func (s *Server) handleListCheckins(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.enrichComments(r, s.enrichBuddies(r, list)))
 }
 
-// handleVote godoc
-//
-//	@Summary		Vote on a checkin
-//	@Description	Approves or rejects a peer checkin. Only members of the checkin room can vote; voting for your own checkin is forbidden.
-//	@Tags			checkins
-//	@Security		BearerAuth
-//	@Accept			json
-//	@Produce		json
-//	@Param			id		path		string		true	"checkin id"
-//	@Param			body	body		VoteRequest	true	"vote"
-//	@Success		200		{object}	checkin.Checkin
-//	@Failure		400		{object}	ErrorResponse
-//	@Failure		401		{object}	ErrorResponse
-//	@Failure		403		{object}	ErrorResponse
-//	@Failure		404		{object}	ErrorResponse
-//	@Failure		409		{object}	ErrorResponse
-//	@Failure		502		{object}	ErrorResponse
-//	@Router			/checkins/{id}/vote [post]
+// @Summary		Vote on a checkin
+// @Description	Approves or rejects a peer checkin. Only members of the checkin room can vote; voting for your own checkin is forbidden.
+// @Tags			checkins
+// @Security		BearerAuth
+// @Accept			json
+// @Produce		json
+// @Param			id		path		string		true	"checkin id"
+// @Param			body	body		VoteRequest	true	"vote"
+// @Success		200		{object}	checkin.Checkin
+// @Failure		400		{object}	ErrorResponse
+// @Failure		401		{object}	ErrorResponse
+// @Failure		403		{object}	ErrorResponse
+// @Failure		404		{object}	ErrorResponse
+// @Failure		409		{object}	ErrorResponse
+// @Failure		502		{object}	ErrorResponse
+// @Router			/checkins/{id}/vote [post]
 func (s *Server) handleVote(w http.ResponseWriter, r *http.Request) {
 	checkinID := r.PathValue("id")
 	if checkinID == "" {

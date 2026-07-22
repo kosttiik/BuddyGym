@@ -608,3 +608,36 @@ func (f *fakeCheckins) Vote(_ context.Context, checkinID string, voterID int64, 
 	f.checkins[checkinID] = c
 	return c, nil
 }
+
+type fakeFreezes struct {
+	freezes map[[2]int64][]domain.Freeze
+	nextID  int64
+}
+
+func newFakeFreezes() *fakeFreezes {
+	return &fakeFreezes{freezes: map[[2]int64][]domain.Freeze{}}
+}
+
+func (f *fakeFreezes) Create(_ context.Context, roomID, userID int64, startsAt, endsAt time.Time) (domain.Freeze, error) {
+	f.nextID++
+	fz := domain.Freeze{ID: f.nextID, RoomID: roomID, UserID: userID,
+		StartsAt: startsAt, EndsAt: endsAt, CreatedAt: time.Now()}
+	k := [2]int64{roomID, userID}
+	f.freezes[k] = append(f.freezes[k], fz)
+	return fz, nil
+}
+
+func (f *fakeFreezes) Cancel(_ context.Context, roomID, userID int64, at time.Time) error {
+	list := f.freezes[[2]int64{roomID, userID}]
+	for i := range list {
+		if list[i].CanceledAt == nil && list[i].EndsAt.After(at) {
+			list[i].CanceledAt = &at
+			return nil
+		}
+	}
+	return storage.ErrNotFound
+}
+
+func (f *fakeFreezes) ListByMember(_ context.Context, roomID, userID int64) ([]domain.Freeze, error) {
+	return f.freezes[[2]int64{roomID, userID}], nil
+}

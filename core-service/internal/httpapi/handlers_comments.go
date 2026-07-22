@@ -16,8 +16,6 @@ type CommentRequest struct {
 	Body string `json:"body" example:"Красавчик"`
 }
 
-// checkinRoom resolves the room a checkin belongs to and refuses anyone who is not in it.
-// The photo handler already gates access this way; comments live behind the same door.
 func (s *Server) checkinRoom(w http.ResponseWriter, r *http.Request) (checkin.Checkin, bool) {
 	checkinID := r.PathValue("id")
 	if checkinID == "" {
@@ -46,20 +44,18 @@ func commentID(r *http.Request) (int64, bool) {
 	return id, err == nil && id > 0
 }
 
-// handleListComments godoc
-//
-//	@Summary		List comments on a checkin
-//	@Tags			checkins
-//	@Security		BearerAuth
-//	@Produce		json
-//	@Param			id		path		string	true	"checkin id"
-//	@Param			limit	query		int		false	"page size, default 50, max 100"
-//	@Param			offset	query		int		false	"page offset"
-//	@Success		200		{array}		domain.Comment
-//	@Failure		401		{object}	ErrorResponse
-//	@Failure		403		{object}	ErrorResponse
-//	@Failure		404		{object}	ErrorResponse
-//	@Router			/checkins/{id}/comments [get]
+// @Summary		List comments on a checkin
+// @Tags			checkins
+// @Security		BearerAuth
+// @Produce		json
+// @Param			id		path		string	true	"checkin id"
+// @Param			limit	query		int		false	"page size, default 50, max 100"
+// @Param			offset	query		int		false	"page offset"
+// @Success		200		{array}		domain.Comment
+// @Failure		401		{object}	ErrorResponse
+// @Failure		403		{object}	ErrorResponse
+// @Failure		404		{object}	ErrorResponse
+// @Router			/checkins/{id}/comments [get]
 func (s *Server) handleListComments(w http.ResponseWriter, r *http.Request) {
 	target, ok := s.checkinRoom(w, r)
 	if !ok {
@@ -83,24 +79,22 @@ func (s *Server) handleListComments(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, list)
 }
 
-// handleAddComment godoc
-//
-//	@Summary		Comment on a checkin
-//	@Description	Room members only. Send JSON with a body, or multipart/form-data with a "body" field and an optional "photo" file up to 5 MB. Either the text or the photo must be there.
-//	@Tags			checkins
-//	@Security		BearerAuth
-//	@Accept			json
-//	@Accept			mpfd
-//	@Produce		json
-//	@Param			id		path		string			true	"checkin id"
-//	@Param			body	body		CommentRequest	false	"comment (json variant)"
-//	@Param			photo	formData	file			false	"attached image"
-//	@Success		201		{object}	domain.Comment
-//	@Failure		400		{object}	ErrorResponse
-//	@Failure		401		{object}	ErrorResponse
-//	@Failure		403		{object}	ErrorResponse
-//	@Failure		404		{object}	ErrorResponse
-//	@Router			/checkins/{id}/comments [post]
+// @Summary		Comment on a checkin
+// @Description	Room members only. Send JSON with a body, or multipart/form-data with a "body" field and an optional "photo" file up to 5 MB. Either the text or the photo must be there.
+// @Tags			checkins
+// @Security		BearerAuth
+// @Accept			json
+// @Accept			mpfd
+// @Produce		json
+// @Param			id		path		string			true	"checkin id"
+// @Param			body	body		CommentRequest	false	"comment (json variant)"
+// @Param			photo	formData	file			false	"attached image"
+// @Success		201		{object}	domain.Comment
+// @Failure		400		{object}	ErrorResponse
+// @Failure		401		{object}	ErrorResponse
+// @Failure		403		{object}	ErrorResponse
+// @Failure		404		{object}	ErrorResponse
+// @Router			/checkins/{id}/comments [post]
 func (s *Server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 	target, ok := s.checkinRoom(w, r)
 	if !ok {
@@ -164,7 +158,6 @@ func (s *Server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 
 	comment, err := s.comments.Add(r.Context(), target.ID, target.RoomID, user.ID, body, photoKey)
 	if err != nil {
-		// the row is the record: an orphaned object is cheaper than a comment pointing at nothing
 		if photoKey != "" {
 			s.commentPhotos.Delete(r.Context(), photoKey)
 		}
@@ -174,20 +167,18 @@ func (s *Server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, comment)
 }
 
-// handleDeleteComment godoc
-//
-//	@Summary		Delete a comment
-//	@Description	The author can delete their own comment; the room creator can delete any.
-//	@Tags			checkins
-//	@Security		BearerAuth
-//	@Param			id			path	string	true	"checkin id"
-//	@Param			commentId	path	int		true	"comment id"
-//	@Success		204
-//	@Failure		400	{object}	ErrorResponse
-//	@Failure		401	{object}	ErrorResponse
-//	@Failure		403	{object}	ErrorResponse
-//	@Failure		404	{object}	ErrorResponse
-//	@Router			/checkins/{id}/comments/{commentId} [delete]
+// @Summary		Delete a comment
+// @Description	The author can delete their own comment; the room creator can delete any.
+// @Tags			checkins
+// @Security		BearerAuth
+// @Param			id			path	string	true	"checkin id"
+// @Param			commentId	path	int		true	"comment id"
+// @Success		204
+// @Failure		400	{object}	ErrorResponse
+// @Failure		401	{object}	ErrorResponse
+// @Failure		403	{object}	ErrorResponse
+// @Failure		404	{object}	ErrorResponse
+// @Router			/checkins/{id}/comments/{commentId} [delete]
 func (s *Server) handleDeleteComment(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.checkinRoom(w, r); !ok {
 		return
@@ -210,37 +201,33 @@ func (s *Server) handleDeleteComment(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleLikeComment godoc
-//
-//	@Summary		Like a comment
-//	@Description	Idempotent: liking twice leaves one like.
-//	@Tags			checkins
-//	@Security		BearerAuth
-//	@Produce		json
-//	@Param			id			path		string	true	"checkin id"
-//	@Param			commentId	path		int		true	"comment id"
-//	@Success		200			{object}	domain.Comment
-//	@Failure		401			{object}	ErrorResponse
-//	@Failure		403			{object}	ErrorResponse
-//	@Failure		404			{object}	ErrorResponse
-//	@Router			/checkins/{id}/comments/{commentId}/like [post]
+// @Summary		Like a comment
+// @Description	Idempotent: liking twice leaves one like.
+// @Tags			checkins
+// @Security		BearerAuth
+// @Produce		json
+// @Param			id			path		string	true	"checkin id"
+// @Param			commentId	path		int		true	"comment id"
+// @Success		200			{object}	domain.Comment
+// @Failure		401			{object}	ErrorResponse
+// @Failure		403			{object}	ErrorResponse
+// @Failure		404			{object}	ErrorResponse
+// @Router			/checkins/{id}/comments/{commentId}/like [post]
 func (s *Server) handleLikeComment(w http.ResponseWriter, r *http.Request) {
 	s.setLike(w, r, true)
 }
 
-// handleUnlikeComment godoc
-//
-//	@Summary		Remove a like from a comment
-//	@Tags			checkins
-//	@Security		BearerAuth
-//	@Produce		json
-//	@Param			id			path		string	true	"checkin id"
-//	@Param			commentId	path		int		true	"comment id"
-//	@Success		200			{object}	domain.Comment
-//	@Failure		401			{object}	ErrorResponse
-//	@Failure		403			{object}	ErrorResponse
-//	@Failure		404			{object}	ErrorResponse
-//	@Router			/checkins/{id}/comments/{commentId}/like [delete]
+// @Summary		Remove a like from a comment
+// @Tags			checkins
+// @Security		BearerAuth
+// @Produce		json
+// @Param			id			path		string	true	"checkin id"
+// @Param			commentId	path		int		true	"comment id"
+// @Success		200			{object}	domain.Comment
+// @Failure		401			{object}	ErrorResponse
+// @Failure		403			{object}	ErrorResponse
+// @Failure		404			{object}	ErrorResponse
+// @Router			/checkins/{id}/comments/{commentId}/like [delete]
 func (s *Server) handleUnlikeComment(w http.ResponseWriter, r *http.Request) {
 	s.setLike(w, r, false)
 }
@@ -280,20 +267,18 @@ func (s *Server) setLike(w http.ResponseWriter, r *http.Request, on bool) {
 	writeJSON(w, http.StatusOK, comment)
 }
 
-// handleGetCommentPhoto godoc
-//
-//	@Summary		Download a photo attached to a comment
-//	@Description	Room members only. The bucket is private and the bytes are proxied by core, so browsers must fetch this with XHR rather than a plain <img src>.
-//	@Tags			checkins
-//	@Security		BearerAuth
-//	@Produce		image/jpeg
-//	@Param			id			path		string	true	"checkin id"
-//	@Param			commentId	path		int		true	"comment id"
-//	@Success		200			{file}		binary
-//	@Failure		401			{object}	ErrorResponse
-//	@Failure		403			{object}	ErrorResponse
-//	@Failure		404			{object}	ErrorResponse
-//	@Router			/checkins/{id}/comments/{commentId}/photo [get]
+// @Summary		Download a photo attached to a comment
+// @Description	Room members only. The bucket is private and the bytes are proxied by core, so browsers must fetch this with XHR rather than a plain <img src>.
+// @Tags			checkins
+// @Security		BearerAuth
+// @Produce		image/jpeg
+// @Param			id			path		string	true	"checkin id"
+// @Param			commentId	path		int		true	"comment id"
+// @Success		200			{file}		binary
+// @Failure		401			{object}	ErrorResponse
+// @Failure		403			{object}	ErrorResponse
+// @Failure		404			{object}	ErrorResponse
+// @Router			/checkins/{id}/comments/{commentId}/photo [get]
 func (s *Server) handleGetCommentPhoto(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.checkinRoom(w, r); !ok {
 		return
@@ -341,7 +326,6 @@ func (s *Server) enrichComments(r *http.Request, list []checkin.Checkin) []check
 	}
 	summaries, err := s.comments.Summaries(r.Context(), ids, userFrom(r.Context()).ID)
 	if err != nil {
-		// the feed is worth more than the counters
 		s.log.Error("load comment summaries", "err", err)
 		return list
 	}

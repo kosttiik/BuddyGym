@@ -53,7 +53,6 @@ func (s *Server) withAuth(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// allow applies a rate limiter and writes 429 when the key is throttled.
 func (s *Server) allow(w http.ResponseWriter, r *http.Request, limiter RateLimiter, key string) bool {
 	if limiter == nil {
 		return true

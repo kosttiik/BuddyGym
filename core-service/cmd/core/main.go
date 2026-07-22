@@ -1,5 +1,3 @@
-// The core command runs the BuddyGym core service: REST API for the mini app
-// and the internal gRPC endpoint for checkin-service.
 package main
 
 import (
@@ -45,7 +43,6 @@ import (
 //	@description				JWT from POST /auth/telegram: "Bearer <token>"
 
 func main() {
-	// one-shot: the mirror normally runs on login, this walks the users who never logged in since
 	backfill := flag.Bool("backfill-avatars", false, "mirror every avatar not mirrored yet, then exit")
 	flag.Parse()
 
@@ -94,7 +91,6 @@ func backfillAvatars(log *slog.Logger) error {
 
 	var done, failed int
 	for _, u := range pending {
-		// one bad user must not abort the run: log it and keep going
 		if err := mirror.Sync(ctx, u.ID, u.PhotoURL, u.AvatarSource); err != nil {
 			log.Error("mirror avatar", "err", err, "user_id", u.ID)
 			failed++
@@ -143,11 +139,10 @@ func run(log *slog.Logger) error {
 	rooms := storage.NewRooms(pool)
 	checkinClient := checkin.NewClient(conn)
 	results := storage.NewResults(pool)
+	freezes := storage.NewFreezes(pool)
 	buddies := storage.NewBuddies(pool)
 	comments := storage.NewComments(pool)
 
-	// avatars are optional: without object storage the mini app falls back to initials.
-	// these stay interface-typed so a disabled mirror is a nil interface, not a typed nil.
 	var avatarStore httpapi.AvatarStore
 	var avatarMirror httpapi.AvatarMirror
 	var commentPhotos httpapi.ObjectStore
@@ -172,6 +167,7 @@ func run(log *slog.Logger) error {
 	api := httpapi.New(httpapi.Options{
 		Users:          users,
 		Rooms:          rooms,
+		Freezes:        freezes,
 		Streaks:        results,
 		Buddies:        buddies,
 		Comments:       comments,

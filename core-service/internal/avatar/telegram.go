@@ -1,8 +1,4 @@
 // Package avatar mirrors Telegram profile pictures into object storage.
-//
-// The photo_url Telegram puts in initData points at t.me, which our users cannot reach, so the
-// image renders broken in the mini app. The Bot API on api.telegram.org is reachable, so core
-// pulls the bytes from there once and serves them from its own bucket afterwards.
 package avatar
 
 import (
@@ -21,8 +17,6 @@ const (
 	maxBytes = 5 << 20
 )
 
-// ErrNoPhoto means Telegram has no picture to give us: the user never set one, hid it behind
-// privacy settings, or never started the bot.
 var ErrNoPhoto = fmt.Errorf("no telegram profile photo")
 
 type Telegram struct {
@@ -47,7 +41,6 @@ type photoSize struct {
 	Width  int    `json:"width"`
 }
 
-// Fetch downloads the largest available profile photo of the user.
 func (t *Telegram) Fetch(ctx context.Context, userID int64) ([]byte, error) {
 	var photos struct {
 		TotalCount int           `json:"total_count"`
@@ -64,7 +57,6 @@ func (t *Telegram) Fetch(ctx context.Context, userID int64) ([]byte, error) {
 		return nil, ErrNoPhoto
 	}
 
-	// sizes come smallest first; the last one is the original
 	sizes := photos.Photos[0]
 	best := sizes[0]
 	for _, s := range sizes {

@@ -70,7 +70,6 @@ func (s *Server) ApplyCheckinResult(ctx context.Context, req *pbv1.ApplyCheckinR
 		return nil, status.Error(codes.InvalidArgument, "status must be a final one")
 	}
 
-	// an older checkin-service sends no workout time; now() keeps core deployable ahead of it
 	createdAt := s.now()
 	if ts := req.GetCheckinCreatedAt(); ts.IsValid() {
 		createdAt = ts.AsTime()
@@ -86,7 +85,6 @@ func (s *Server) ApplyCheckinResult(ctx context.Context, req *pbv1.ApplyCheckinR
 	if applied && result == storage.ResultApproved {
 		granted, err = s.reward(ctx, req.GetUserId())
 		if err != nil {
-			// counter is already committed, do not fail the call over rewards
 			s.log.Error("grant rewards", "err", err, "user_id", req.GetUserId())
 		}
 		if err := s.creditBuddies(ctx, req.GetCheckinId(), req.GetRoomId(), createdAt); err != nil {
@@ -105,10 +103,6 @@ func (s *Server) ApplyCheckinResult(ctx context.Context, req *pbv1.ApplyCheckinR
 	}, nil
 }
 
-// creditBuddies gives everyone tagged on the checkin the same workout, once the room has
-// approved it. The synthetic checkin id reuses the whole existing pipeline: the primary key on
-// checkin_results makes a redelivered result a no-op, the period counters derive themselves,
-// and reward() runs for the buddy exactly as if they had checked in on their own.
 func (s *Server) creditBuddies(ctx context.Context, checkinID string, roomID int64, createdAt time.Time) error {
 	buddyIDs, err := s.buddies.UserIDs(ctx, checkinID)
 	if err != nil {

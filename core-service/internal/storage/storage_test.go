@@ -791,3 +791,48 @@ func TestMembershipCustomSportAndGoal(t *testing.T) {
 		t.Errorf("non-member update err = %v, want ErrNotFound", err)
 	}
 }
+
+func TestFreezesStorage(t *testing.T) {
+	ctx := context.Background()
+	freezes := storage.NewFreezes(pool(t))
+	results := storage.NewResults(pool(t))
+	mustUser(t, 112)
+	room := mustRoom(t, 112)
+
+	now := time.Now().UTC().Truncate(24 * time.Hour)
+	fz, err := freezes.Create(ctx, room.ID, 112, now.AddDate(0, 0, 2), now.AddDate(0, 0, 9))
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if fz.ID == 0 || fz.CanceledAt != nil {
+		t.Errorf("freeze = %+v", fz)
+	}
+
+	list, err := freezes.ListByMember(ctx, room.ID, 112)
+	if err != nil || len(list) != 1 {
+		t.Fatalf("ListByMember = %v %v, want 1", list, err)
+	}
+
+	inputs, err := results.StreaksByRoom(ctx, room.ID)
+	if err != nil {
+		t.Fatalf("StreaksByRoom: %v", err)
+	}
+	if len(inputs) != 1 || len(inputs[0].Freezes) != 1 {
+		t.Fatalf("inputs must carry freezes: %+v", inputs)
+	}
+	byUser, err := results.StreaksByUser(ctx, 112)
+	if err != nil || len(byUser) != 1 || len(byUser[0].Freezes) != 1 {
+		t.Fatalf("StreaksByUser must carry freezes: %+v %v", byUser, err)
+	}
+
+	if err := freezes.Cancel(ctx, room.ID, 112, time.Now()); err != nil {
+		t.Fatalf("Cancel: %v", err)
+	}
+	list, _ = freezes.ListByMember(ctx, room.ID, 112)
+	if list[0].CanceledAt == nil {
+		t.Error("cancel not persisted")
+	}
+	if err := freezes.Cancel(ctx, room.ID, 112, time.Now()); err != storage.ErrNotFound {
+		t.Errorf("second cancel = %v, want ErrNotFound", err)
+	}
+}

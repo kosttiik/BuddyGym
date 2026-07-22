@@ -22,12 +22,9 @@ func NewRooms(pool *pgxpool.Pool) *Rooms {
 
 const roomColumns = "id, name, kind, invite_code, goal_per_period, period_days, votes_required, creator_id, created_at, avatar_key"
 
-// qualified for queries that join memberships, where goal_per_period is ambiguous
 const roomColumnsR = "r.id, r.name, r.kind, r.invite_code, r.goal_per_period, r.period_days, r.votes_required, r.creator_id, r.created_at, r.avatar_key"
 
-// Periods are a fixed grid anchored on the day the member joined, the same grid
-// domain.RoomStreak walks. memberships.period_start only moves when a checkin lands, so
-// it would drift away from the streak and show a goal met against a period already burnt.
+// period grid anchored on joined_at, the same grid domain.RoomStreak walks
 const periodStartDate = `
 	((m.joined_at AT TIME ZONE 'UTC')::date + (floor(
 		(((now() AT TIME ZONE 'UTC')::date - (m.joined_at AT TIME ZONE 'UTC')::date))::numeric
@@ -43,7 +40,6 @@ const periodAwareCount = `(
 
 const periodEndsAt = `((` + periodStartDate + ` + r.period_days)::timestamptz)`
 
-// personal goal wins over the room goal wherever a member is judged
 const effectiveGoal = `COALESCE(m.goal_per_period, r.goal_per_period)`
 
 func scanRoom(row pgx.Row) (domain.Room, error) {
@@ -57,8 +53,6 @@ func scanRoom(row pgx.Row) (domain.Room, error) {
 	return rm, err
 }
 
-// Create inserts the room and enrolls the creator in one transaction.
-// Invite code generation retries on the rare unique collision.
 func (r *Rooms) Create(ctx context.Context, room domain.Room) (domain.Room, error) {
 	for range 3 {
 		room.InviteCode = domain.NewInviteCode()
@@ -115,7 +109,6 @@ func (r *Rooms) Update(ctx context.Context, room domain.Room) (domain.Room, erro
 		room.ID, room.Name, room.Kind, room.GoalPerPeriod, room.PeriodDays, room.VotesRequired))
 }
 
-// AddAvatar appends a picture to the room gallery and makes it the current one.
 func (r *Rooms) AddAvatar(ctx context.Context, roomID, userID int64, key string) (domain.RoomAvatar, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -146,7 +139,6 @@ func (r *Rooms) AddAvatar(ctx context.Context, roomID, userID int64, key string)
 	return added, tx.Commit(ctx)
 }
 
-// ListAvatars returns the gallery, newest first.
 func (r *Rooms) ListAvatars(ctx context.Context, roomID int64) ([]domain.RoomAvatar, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT a.id, a.uploaded_by, a.created_at, a.object_key,
@@ -182,8 +174,6 @@ func (r *Rooms) GetAvatar(ctx context.Context, roomID, avatarID int64) (domain.R
 	return a, err
 }
 
-// DeleteAvatar drops one picture and, when it was the current one, falls back to the newest
-// picture left. It returns the object key so the caller can erase the bytes.
 func (r *Rooms) DeleteAvatar(ctx context.Context, roomID, avatarID int64) (string, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -253,7 +243,6 @@ func (r *Rooms) ListByUser(ctx context.Context, userID int64) ([]domain.RoomWith
 	return out, rows.Err()
 }
 
-// ListOpen skips rooms the user already belongs to: they have nothing to join there.
 func (r *Rooms) ListOpen(ctx context.Context, userID int64) ([]domain.Room, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT `+roomColumns+`
@@ -330,8 +319,6 @@ func (r *Rooms) IsMember(ctx context.Context, roomID, userID int64) (bool, error
 	return ok, err
 }
 
-// UpdateMembership replaces the member's personal sport and goal. A nil goal
-// falls back to the room goal.
 func (r *Rooms) UpdateMembership(ctx context.Context, roomID, userID int64, sportName, sportEmoji string, goal *int) error {
 	tag, err := r.pool.Exec(ctx, `
 		UPDATE memberships SET sport_name = $3, sport_emoji = $4, goal_per_period = $5
@@ -346,7 +333,6 @@ func (r *Rooms) UpdateMembership(ctx context.Context, roomID, userID int64, spor
 	return nil
 }
 
-// Join is idempotent: joining a room twice is not an error.
 func (r *Rooms) Join(ctx context.Context, roomID, userID int64) error {
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO memberships (room_id, user_id)
@@ -354,8 +340,6 @@ func (r *Rooms) Join(ctx context.Context, roomID, userID int64) error {
 	return err
 }
 
-// Leave drops the membership and, when it was the last one, marks the room for deletion.
-// The row is kept for a grace period so the checkin service can purge its photos first.
 func (r *Rooms) Leave(ctx context.Context, roomID, userID int64) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -383,7 +367,6 @@ func (r *Rooms) Leave(ctx context.Context, roomID, userID int64) error {
 	return tx.Commit(ctx)
 }
 
-// ListDeletedBefore returns rooms whose grace period has run out.
 func (r *Rooms) ListDeletedBefore(ctx context.Context, cutoff time.Time, limit int) ([]int64, error) {
 	rows, err := r.pool.Query(ctx,
 		"SELECT id FROM rooms WHERE deleted_at IS NOT NULL AND deleted_at <= $1 ORDER BY deleted_at LIMIT $2",
@@ -404,7 +387,6 @@ func (r *Rooms) ListDeletedBefore(ctx context.Context, cutoff time.Time, limit i
 	return ids, rows.Err()
 }
 
-// Purge erases a room for good. Memberships and results go with it by cascade.
 func (r *Rooms) Purge(ctx context.Context, roomID int64) error {
 	_, err := r.pool.Exec(ctx, "DELETE FROM rooms WHERE id = $1 AND deleted_at IS NOT NULL", roomID)
 	return err
