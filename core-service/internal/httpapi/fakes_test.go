@@ -325,6 +325,7 @@ type fakeRooms struct {
 	members      map[int64]map[int64]time.Time
 	commentRoom  map[int64]int64
 	avatars      map[int64][]domain.RoomAvatar
+	settings     map[[2]int64]membershipSettings
 	nextID       int64
 	nextAvatarID int64
 }
@@ -472,6 +473,23 @@ func (f *fakeRooms) Members(_ context.Context, roomID int64) ([]domain.Member, e
 func (f *fakeRooms) IsMember(_ context.Context, roomID, userID int64) (bool, error) {
 	_, ok := f.members[roomID][userID]
 	return ok, nil
+}
+
+type membershipSettings struct {
+	SportName  string
+	SportEmoji string
+	Goal       *int
+}
+
+func (f *fakeRooms) UpdateMembership(_ context.Context, roomID, userID int64, sportName, sportEmoji string, goal *int) error {
+	if _, ok := f.members[roomID][userID]; !ok {
+		return storage.ErrNotFound
+	}
+	if f.settings == nil {
+		f.settings = map[[2]int64]membershipSettings{}
+	}
+	f.settings[[2]int64{roomID, userID}] = membershipSettings{sportName, sportEmoji, goal}
+	return nil
 }
 
 func (f *fakeRooms) Join(_ context.Context, roomID, userID int64) error {
