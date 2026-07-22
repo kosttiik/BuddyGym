@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -118,11 +119,41 @@ func (f *fakeBuddies) UserIDs(_ context.Context, checkinID string) ([]int64, err
 	return f.tagged[checkinID], nil
 }
 
+type recordedEvent struct {
+	Type    string
+	RoomID  int64
+	ActorID int64
+	Subject map[string]any
+}
+
+type fakeEvents struct {
+	mu     sync.Mutex
+	events []recordedEvent
+}
+
+func (f *fakeEvents) Add(_ context.Context, eventType string, roomID, actorID int64, subject map[string]any) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.events = append(f.events, recordedEvent{eventType, roomID, actorID, subject})
+	return nil
+}
+
+func (f *fakeEvents) types() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]string, 0, len(f.events))
+	for _, e := range f.events {
+		out = append(out, e.Type)
+	}
+	return out
+}
+
 type env struct {
 	users   *fakeUsers
 	rooms   *fakeRooms
 	results *fakeResults
 	buddies *fakeBuddies
+	events  *fakeEvents
 	client  pbv1.CoreInternalServiceClient
 }
 
@@ -133,11 +164,12 @@ func newEnv(t *testing.T) *env {
 		rooms:   &fakeRooms{rooms: map[int64]domain.Room{}, members: map[int64][]int64{}},
 		results: &fakeResults{seen: map[string]bool{}, counts: map[resultKey]int{}, days: map[int64][]time.Time{}},
 		buddies: &fakeBuddies{tagged: map[string][]int64{}},
+		events:  &fakeEvents{},
 	}
 	e.results.users = e.users
 	lis := bufconn.Listen(1 << 20)
 	srv := grpc.NewServer()
-	pbv1.RegisterCoreInternalServiceServer(srv, grpcserver.New(e.users, e.rooms, e.results, e.buddies, nil))
+	pbv1.RegisterCoreInternalServiceServer(srv, grpcserver.New(e.users, e.rooms, e.results, e.buddies, e.events, nil))
 	go srv.Serve(lis)
 	t.Cleanup(srv.Stop)
 
@@ -340,5 +372,28 @@ func TestGetRoomVerification(t *testing.T) {
 		&pbv1.GetRoomVerificationRequest{RoomId: 404})
 	if status.Code(err) != codes.NotFound {
 		t.Errorf("missing room: %v, want NotFound", err)
+	}
+}
+
+func TestApplyCheckinResultEmitsEventOnce(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	req := &pbv1.ApplyCheckinResultRequest{
+		CheckinId: "c-ev", RoomId: 3, UserId: 8,
+		Status: pbv1.CheckinStatus_CHECKIN_STATUS_APPROVED,
+	}
+
+	if _, err := e.client.ApplyCheckinResult(ctx, req); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if _, err := e.client.ApplyCheckinResult(ctx, req); err != nil {
+		t.Fatalf("re-apply: %v", err)
+	}
+
+	if got := e.events.types(); !slices.Equal(got, []string{"checkin.approved"}) {
+		t.Fatalf("events = %v, want one checkin.approved", got)
+	}
+	if ev := e.events.events[0]; ev.RoomID != 3 || ev.ActorID != 8 || ev.Subject["checkin_id"] != "c-ev" {
+		t.Errorf("event = %+v", ev)
 	}
 }

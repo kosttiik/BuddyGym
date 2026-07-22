@@ -57,6 +57,11 @@ func (s *Server) handleCreateFreeze(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, err)
 		return
 	}
+	s.emit(r.Context(), "freeze.scheduled", room.ID, userID, map[string]any{
+		"freeze_id": fz.ID,
+		"starts_at": fz.StartsAt.Format("2006-01-02"),
+		"ends_at":   fz.EndsAt.Format("2006-01-02"),
+	})
 	writeJSON(w, http.StatusCreated, fz)
 }
 
@@ -77,9 +82,11 @@ func (s *Server) handleCancelFreeze(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := s.freezes.Cancel(r.Context(), room.ID, userFrom(r.Context()).ID, s.now()); err != nil {
+	userID := userFrom(r.Context()).ID
+	if err := s.freezes.Cancel(r.Context(), room.ID, userID, s.now()); err != nil {
 		s.mapError(w, err)
 		return
 	}
+	s.emit(r.Context(), "freeze.canceled", room.ID, userID, nil)
 	w.WriteHeader(http.StatusNoContent)
 }

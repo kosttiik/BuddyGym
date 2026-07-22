@@ -38,21 +38,35 @@ type ResultsRepo interface {
 	PeriodCount(ctx context.Context, roomID, userID int64) (int, error)
 }
 
+type EventsRepo interface {
+	Add(ctx context.Context, eventType string, roomID, actorID int64, subject map[string]any) error
+}
+
 type Server struct {
 	pbv1.UnimplementedCoreInternalServiceServer
 	users   UsersRepo
 	rooms   RoomsRepo
 	results ResultsRepo
 	buddies BuddiesRepo
+	events  EventsRepo
 	log     *slog.Logger
 	now     func() time.Time
 }
 
-func New(users UsersRepo, rooms RoomsRepo, results ResultsRepo, buddies BuddiesRepo, log *slog.Logger) *Server {
+func New(users UsersRepo, rooms RoomsRepo, results ResultsRepo, buddies BuddiesRepo, events EventsRepo, log *slog.Logger) *Server {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Server{users: users, rooms: rooms, results: results, buddies: buddies, log: log, now: time.Now}
+	return &Server{users: users, rooms: rooms, results: results, buddies: buddies, events: events, log: log, now: time.Now}
+}
+
+func (s *Server) emit(ctx context.Context, eventType string, roomID, actorID int64, subject map[string]any) {
+	if s.events == nil {
+		return
+	}
+	if err := s.events.Add(ctx, eventType, roomID, actorID, subject); err != nil {
+		s.log.Error("emit event", "err", err, "type", eventType)
+	}
 }
 
 var resultNames = map[pbv1.CheckinStatus]string{
@@ -91,6 +105,12 @@ func (s *Server) ApplyCheckinResult(ctx context.Context, req *pbv1.ApplyCheckinR
 			s.log.Error("credit buddies", "err", err, "checkin_id", req.GetCheckinId())
 		}
 	}
+	if applied {
+		s.emit(ctx, "checkin."+result, req.GetRoomId(), req.GetUserId(), map[string]any{
+			"checkin_id": req.GetCheckinId(),
+			"granted":    granted,
+		})
+	}
 
 	count, err := s.results.PeriodCount(ctx, req.GetRoomId(), req.GetUserId())
 	if err != nil {
@@ -120,6 +140,7 @@ func (s *Server) creditBuddies(ctx context.Context, checkinID string, roomID int
 		if _, err := s.reward(ctx, buddyID); err != nil {
 			s.log.Error("grant rewards", "err", err, "user_id", buddyID)
 		}
+		s.emit(ctx, "buddy.credited", roomID, buddyID, map[string]any{"checkin_id": checkinID})
 	}
 	return nil
 }

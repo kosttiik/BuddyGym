@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -64,6 +65,7 @@ type env struct {
 	users         *fakeUsers
 	rooms         *fakeRooms
 	freezes       *fakeFreezes
+	events        *fakeEvents
 	streaks       *fakeStreaks
 	buddies       *fakeBuddies
 	comments      *fakeComments
@@ -80,6 +82,7 @@ func newEnv(opts ...func(*httpapi.Options)) *env {
 		users:    newFakeUsers(),
 		rooms:    newFakeRooms(),
 		freezes:  newFakeFreezes(),
+		events:   &fakeEvents{},
 		streaks:  newFakeStreaks(),
 		checkins: newFakeCheckins(),
 		avatars:  newFakeAvatars(),
@@ -91,6 +94,7 @@ func newEnv(opts ...func(*httpapi.Options)) *env {
 		Users:         e.users,
 		Rooms:         e.rooms,
 		Freezes:       e.freezes,
+		Events:        e.events,
 		Streaks:       e.streaks,
 		Buddies:       e.buddies,
 		Comments:      e.comments,
@@ -1228,5 +1232,49 @@ func TestUpdateRoomSyncsVotesRequired(t *testing.T) {
 	}
 	if e.checkins.synced != nil {
 		t.Error("sync must not fire when votes_required is unchanged")
+	}
+}
+
+func TestEventsAreEmittedForBotNotifications(t *testing.T) {
+	e := newEnv()
+	room := e.createRoom(t, 1, domain.RoomOpen)
+
+	if rec := e.do(t, "POST", fmt.Sprintf("/api/v1/rooms/%d/join", room.ID), nil, reqOpts{userID: 2}); rec.Code != http.StatusOK {
+		t.Fatalf("join: %d", rec.Code)
+	}
+	// a rejoin is idempotent and must not fire twice
+	if rec := e.do(t, "POST", fmt.Sprintf("/api/v1/rooms/%d/join", room.ID), nil, reqOpts{userID: 2}); rec.Code != http.StatusOK {
+		t.Fatalf("rejoin: %d", rec.Code)
+	}
+
+	rec := e.do(t, "POST", "/api/v1/checkins", httpapi.CreateCheckinGeoRequest{
+		RoomIDs: []int64{room.ID}, Geo: checkin.Geo{Lat: 55, Lon: 37, HorizontalAccuracy: 10},
+	}, reqOpts{userID: 1})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create checkin: %d %s", rec.Code, rec.Body.String())
+	}
+	created := decode[[]checkin.Checkin](t, rec)
+
+	rec = e.do(t, "POST", fmt.Sprintf("/api/v1/checkins/%s/comments", created[0].ID),
+		httpapi.CommentRequest{Body: "nice work"}, reqOpts{userID: 2})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("comment: %d %s", rec.Code, rec.Body.String())
+	}
+
+	day := func(offset int) string { return time.Now().UTC().AddDate(0, 0, offset).Format("2006-01-02") }
+	rec = e.do(t, "POST", fmt.Sprintf("/api/v1/rooms/%d/freeze", room.ID),
+		httpapi.FreezeRequest{StartsAt: day(2), EndsAt: day(9)}, reqOpts{userID: 1})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("freeze: %d %s", rec.Code, rec.Body.String())
+	}
+
+	want := []string{"member.joined", "checkin.created", "comment.created", "freeze.scheduled"}
+	if got := e.events.types(); !slices.Equal(got, want) {
+		t.Errorf("events = %v, want %v", got, want)
+	}
+	for _, ev := range e.events.events {
+		if ev.RoomID != room.ID {
+			t.Errorf("event %q room = %d, want %d", ev.Type, ev.RoomID, room.ID)
+		}
 	}
 }

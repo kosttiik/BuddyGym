@@ -94,6 +94,10 @@ type FreezesRepo interface {
 	ListByMember(ctx context.Context, roomID, userID int64) ([]domain.Freeze, error)
 }
 
+type EventsRepo interface {
+	Add(ctx context.Context, eventType string, roomID, actorID int64, subject map[string]any) error
+}
+
 type PingFunc func(ctx context.Context) error
 
 type RateLimiter interface {
@@ -104,6 +108,7 @@ type Server struct {
 	users          UsersRepo
 	rooms          RoomsRepo
 	freezes        FreezesRepo
+	events         EventsRepo
 	streaks        StreaksRepo
 	buddies        BuddiesRepo
 	comments       CommentsRepo
@@ -128,6 +133,7 @@ type Options struct {
 	Users          UsersRepo
 	Rooms          RoomsRepo
 	Freezes        FreezesRepo
+	Events         EventsRepo
 	Streaks        StreaksRepo
 	Buddies        BuddiesRepo
 	Comments       CommentsRepo
@@ -159,6 +165,7 @@ func New(opts Options) *Server {
 		users:          opts.Users,
 		rooms:          opts.Rooms,
 		freezes:        opts.Freezes,
+		events:         opts.Events,
 		streaks:        opts.Streaks,
 		buddies:        opts.Buddies,
 		comments:       opts.Comments,

@@ -148,6 +148,13 @@ func (s *Server) handleCreateCheckin(w http.ResponseWriter, r *http.Request) {
 			s.internal(w, err)
 			return
 		}
+		s.emit(r.Context(), "checkin.created", c.RoomID, user.ID, map[string]any{
+			"checkin_id":     c.ID,
+			"status":         c.Status,
+			"votes_required": c.VotesRequired,
+			"has_photo":      c.HasPhoto,
+			"buddy_ids":      buddies,
+		})
 	}
 	writeJSON(w, http.StatusCreated, s.enrichBuddies(r, created))
 }
