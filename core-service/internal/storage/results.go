@@ -52,14 +52,14 @@ func (r *Results) TotalApproved(ctx context.Context, userID int64) (int, error) 
 }
 
 const streakInputQuery = `
-	SELECT m.room_id, m.user_id, r.goal_per_period, r.period_days, m.joined_at,
+	SELECT m.room_id, m.user_id, ` + effectiveGoal + `, r.period_days, m.joined_at,
 	       (cr.checkin_created_at AT TIME ZONE 'UTC')::date AS day
 	FROM memberships m
 	JOIN rooms r ON r.id = m.room_id
 	LEFT JOIN checkin_results cr
 	       ON cr.room_id = m.room_id AND cr.user_id = m.user_id AND cr.status = 'approved'
 	WHERE r.deleted_at IS NULL AND %s
-	GROUP BY m.room_id, m.user_id, r.goal_per_period, r.period_days, m.joined_at, day
+	GROUP BY m.room_id, m.user_id, ` + effectiveGoal + `, r.period_days, m.joined_at, day
 	ORDER BY m.room_id, m.user_id, day`
 
 // StreaksByRoom returns one input per member of the room.

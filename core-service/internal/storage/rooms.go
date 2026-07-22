@@ -22,6 +22,9 @@ func NewRooms(pool *pgxpool.Pool) *Rooms {
 
 const roomColumns = "id, name, kind, invite_code, goal_per_period, period_days, votes_required, creator_id, created_at, avatar_key"
 
+// qualified for queries that join memberships, where goal_per_period is ambiguous
+const roomColumnsR = "r.id, r.name, r.kind, r.invite_code, r.goal_per_period, r.period_days, r.votes_required, r.creator_id, r.created_at, r.avatar_key"
+
 // Periods are a fixed grid anchored on the day the member joined, the same grid
 // domain.RoomStreak walks. memberships.period_start only moves when a checkin lands, so
 // it would drift away from the streak and show a goal met against a period already burnt.
@@ -39,6 +42,9 @@ const periodAwareCount = `(
 )`
 
 const periodEndsAt = `((` + periodStartDate + ` + r.period_days)::timestamptz)`
+
+// personal goal wins over the room goal wherever a member is judged
+const effectiveGoal = `COALESCE(m.goal_per_period, r.goal_per_period)`
 
 func scanRoom(row pgx.Row) (domain.Room, error) {
 	var rm domain.Room
@@ -221,9 +227,9 @@ func (r *Rooms) Delete(ctx context.Context, id int64) error {
 
 func (r *Rooms) ListByUser(ctx context.Context, userID int64) ([]domain.RoomWithProgress, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT `+roomColumns+`, `+periodAwareCount+`,
+		SELECT `+roomColumnsR+`, `+periodAwareCount+`,
 		       (SELECT count(*) FROM memberships m2 WHERE m2.room_id = r.id),
-		       `+periodEndsAt+`
+		       `+periodEndsAt+`, `+effectiveGoal+`
 		FROM memberships m
 		JOIN rooms r ON r.id = m.room_id
 		WHERE m.user_id = $1 AND r.deleted_at IS NULL
@@ -238,7 +244,7 @@ func (r *Rooms) ListByUser(ctx context.Context, userID int64) ([]domain.RoomWith
 		var rp domain.RoomWithProgress
 		if err := rows.Scan(&rp.ID, &rp.Name, &rp.Kind, &rp.InviteCode, &rp.GoalPerPeriod,
 			&rp.PeriodDays, &rp.VotesRequired, &rp.CreatorID, &rp.CreatedAt, &rp.AvatarKey,
-			&rp.WorkoutsCount, &rp.MembersCount, &rp.PeriodEndsAt); err != nil {
+			&rp.WorkoutsCount, &rp.MembersCount, &rp.PeriodEndsAt, &rp.MyGoal); err != nil {
 			return nil, err
 		}
 		rp.HasAvatar = rp.AvatarKey != ""
@@ -280,7 +286,8 @@ func (r *Rooms) ListOpen(ctx context.Context, userID int64) ([]domain.Room, erro
 func (r *Rooms) Members(ctx context.Context, roomID int64) ([]domain.Member, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT u.id, u.username, u.first_name, u.photo_url, u.theme, u.rank,
-		       u.status_emoji, u.status_text, u.created_at, u.avatar_key, `+periodAwareCount+`, m.joined_at, `+periodEndsAt+`
+		       u.status_emoji, u.status_text, u.created_at, u.avatar_key, `+periodAwareCount+`, m.joined_at, `+periodEndsAt+`,
+		       m.sport_name, m.sport_emoji, m.goal_per_period, `+effectiveGoal+`
 		FROM memberships m
 		JOIN users u ON u.id = m.user_id
 		JOIN rooms r ON r.id = m.room_id
@@ -296,7 +303,8 @@ func (r *Rooms) Members(ctx context.Context, roomID int64) ([]domain.Member, err
 		var mb domain.Member
 		if err := rows.Scan(&mb.ID, &mb.Username, &mb.FirstName, &mb.PhotoURL, &mb.Theme,
 			&mb.Rank, &mb.StatusEmoji, &mb.StatusText, &mb.CreatedAt, &mb.AvatarKey,
-			&mb.WorkoutsCount, &mb.JoinedAt, &mb.PeriodEndsAt); err != nil {
+			&mb.WorkoutsCount, &mb.JoinedAt, &mb.PeriodEndsAt,
+			&mb.SportName, &mb.SportEmoji, &mb.GoalPerPeriod, &mb.EffectiveGoal); err != nil {
 			return nil, err
 		}
 		mb.HasAvatar = mb.AvatarKey != ""
@@ -320,6 +328,22 @@ func (r *Rooms) IsMember(ctx context.Context, roomID, userID int64) (bool, error
 		"SELECT EXISTS (SELECT 1 FROM memberships WHERE room_id = $1 AND user_id = $2)",
 		roomID, userID).Scan(&ok)
 	return ok, err
+}
+
+// UpdateMembership replaces the member's personal sport and goal. A nil goal
+// falls back to the room goal.
+func (r *Rooms) UpdateMembership(ctx context.Context, roomID, userID int64, sportName, sportEmoji string, goal *int) error {
+	tag, err := r.pool.Exec(ctx, `
+		UPDATE memberships SET sport_name = $3, sport_emoji = $4, goal_per_period = $5
+		WHERE room_id = $1 AND user_id = $2`,
+		roomID, userID, sportName, sportEmoji, goal)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // Join is idempotent: joining a room twice is not an error.

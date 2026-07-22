@@ -739,3 +739,55 @@ func TestCommentLikesAndTopComment(t *testing.T) {
 		t.Errorf("top = %+v, want the oldest to break the tie", top)
 	}
 }
+
+func TestMembershipCustomSportAndGoal(t *testing.T) {
+	ctx := context.Background()
+	rooms := storage.NewRooms(pool(t))
+	results := storage.NewResults(pool(t))
+	mustUser(t, 111)
+	room := mustRoom(t, 111)
+
+	goal := 2
+	if err := rooms.UpdateMembership(ctx, room.ID, 111, "climbing", "🧗", &goal); err != nil {
+		t.Fatalf("UpdateMembership: %v", err)
+	}
+
+	members, err := rooms.Members(ctx, room.ID)
+	if err != nil {
+		t.Fatalf("Members: %v", err)
+	}
+	m := members[0]
+	if m.SportName != "climbing" || m.SportEmoji != "🧗" {
+		t.Errorf("sport = %q %q", m.SportName, m.SportEmoji)
+	}
+	if m.GoalPerPeriod == nil || *m.GoalPerPeriod != 2 || m.EffectiveGoal != 2 {
+		t.Errorf("goal = %v effective %d, want 2/2", m.GoalPerPeriod, m.EffectiveGoal)
+	}
+
+	list, err := rooms.ListByUser(ctx, 111)
+	if err != nil {
+		t.Fatalf("ListByUser: %v", err)
+	}
+	if len(list) != 1 || list[0].MyGoal != 2 {
+		t.Errorf("MyGoal = %+v, want 2", list)
+	}
+
+	inputs, err := results.StreaksByRoom(ctx, room.ID)
+	if err != nil {
+		t.Fatalf("StreaksByRoom: %v", err)
+	}
+	if len(inputs) != 1 || inputs[0].Goal != 2 {
+		t.Errorf("streak goal = %+v, want personal goal 2", inputs)
+	}
+
+	if err := rooms.UpdateMembership(ctx, room.ID, 111, "", "", nil); err != nil {
+		t.Fatalf("reset membership: %v", err)
+	}
+	members, _ = rooms.Members(ctx, room.ID)
+	if m := members[0]; m.SportName != "" || m.GoalPerPeriod != nil || m.EffectiveGoal != 3 {
+		t.Errorf("after reset: %+v, want room defaults", m)
+	}
+	if err := rooms.UpdateMembership(ctx, room.ID, 999, "", "", nil); err != storage.ErrNotFound {
+		t.Errorf("non-member update err = %v, want ErrNotFound", err)
+	}
+}

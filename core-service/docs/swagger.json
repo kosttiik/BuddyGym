@@ -1868,6 +1868,76 @@
                 }
             }
         },
+        "/rooms/{id}/membership": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Sets the member's personal sport and workout goal for this room. Null goal falls back to the room goal, empty strings clear the sport.",
+                "consumes": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rooms"
+                ],
+                "summary": "Update my settings in a room",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "room id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "personal settings",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.UpdateMembershipRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/users/{id}": {
             "get": {
                 "security": [
@@ -2115,8 +2185,14 @@
                 "created_at": {
                     "type": "string"
                 },
+                "effective_goal": {
+                    "type": "integer"
+                },
                 "first_name": {
                     "type": "string"
+                },
+                "goal_per_period": {
+                    "type": "integer"
                 },
                 "has_avatar": {
                     "description": "clients read the bytes from GET /users/{id}/avatar, never from object storage directly",
@@ -2137,6 +2213,13 @@
                 },
                 "rank": {
                     "description": "derived from the workout total, not settable",
+                    "type": "string"
+                },
+                "sport_emoji": {
+                    "type": "string"
+                },
+                "sport_name": {
+                    "description": "what the member trains and how often; empty/nil means the room defaults apply",
                     "type": "string"
                 },
                 "status_emoji": {
@@ -2237,6 +2320,10 @@
                     "type": "string"
                 },
                 "members_count": {
+                    "type": "integer"
+                },
+                "my_goal": {
+                    "description": "the viewer's personal goal in this room, falling back to the room goal",
                     "type": "integer"
                 },
                 "name": {
@@ -2513,6 +2600,25 @@
                         "neon"
                     ],
                     "example": "dark"
+                }
+            }
+        },
+        "httpapi.UpdateMembershipRequest": {
+            "type": "object",
+            "properties": {
+                "goal_per_period": {
+                    "type": "integer",
+                    "maximum": 100,
+                    "minimum": 1,
+                    "example": 2
+                },
+                "sport_emoji": {
+                    "type": "string",
+                    "example": "🧗"
+                },
+                "sport_name": {
+                    "type": "string",
+                    "example": "climbing"
                 }
             }
         },

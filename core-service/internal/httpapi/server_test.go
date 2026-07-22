@@ -1127,3 +1127,44 @@ func TestRoomAvatarOutsidersAndJunk(t *testing.T) {
 		t.Errorf("non-image upload: %d, want 400", rec.Code)
 	}
 }
+
+func TestUpdateMembership(t *testing.T) {
+	e := newEnv()
+	room := e.createRoom(t, 1, domain.RoomOpen)
+	base := fmt.Sprintf("/api/v1/rooms/%d/membership", room.ID)
+
+	goal := 2
+	rec := e.do(t, "PATCH", base, httpapi.UpdateMembershipRequest{
+		SportName: "climbing", SportEmoji: "🧗", GoalPerPeriod: &goal,
+	}, reqOpts{userID: 1})
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("update membership: %d %s", rec.Code, rec.Body.String())
+	}
+	got := e.rooms.settings[[2]int64{room.ID, 1}]
+	if got.SportName != "climbing" || got.SportEmoji != "🧗" || got.Goal == nil || *got.Goal != 2 {
+		t.Errorf("settings not stored: %+v", got)
+	}
+
+	rec = e.do(t, "PATCH", base, httpapi.UpdateMembershipRequest{}, reqOpts{userID: 1})
+	if rec.Code != http.StatusNoContent {
+		t.Errorf("reset to defaults: %d %s", rec.Code, rec.Body.String())
+	}
+	if got := e.rooms.settings[[2]int64{room.ID, 1}]; got.SportName != "" || got.Goal != nil {
+		t.Errorf("settings not reset: %+v", got)
+	}
+
+	if rec := e.do(t, "PATCH", base, httpapi.UpdateMembershipRequest{}, reqOpts{userID: 9}); rec.Code != http.StatusForbidden {
+		t.Errorf("non-member: %d, want 403", rec.Code)
+	}
+	if rec := e.do(t, "PATCH", base, httpapi.UpdateMembershipRequest{SportEmoji: "🚗"}, reqOpts{userID: 1}); rec.Code != http.StatusBadRequest {
+		t.Errorf("non-sport emoji: %d, want 400", rec.Code)
+	}
+	bad := 0
+	if rec := e.do(t, "PATCH", base, httpapi.UpdateMembershipRequest{GoalPerPeriod: &bad}, reqOpts{userID: 1}); rec.Code != http.StatusBadRequest {
+		t.Errorf("zero goal: %d, want 400", rec.Code)
+	}
+	long := strings.Repeat("x", 33)
+	if rec := e.do(t, "PATCH", base, httpapi.UpdateMembershipRequest{SportName: long}, reqOpts{userID: 1}); rec.Code != http.StatusBadRequest {
+		t.Errorf("long sport name: %d, want 400", rec.Code)
+	}
+}

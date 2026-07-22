@@ -22,6 +22,27 @@ type JoinByCodeRequest struct {
 	InviteCode string `json:"invite_code" example:"7HKPQ2XW"`
 }
 
+// UpdateMembershipRequest replaces the member's personal settings in a room.
+// A null goal_per_period falls back to the room goal; empty strings clear the sport.
+type UpdateMembershipRequest struct {
+	SportName     string `json:"sport_name" example:"climbing"`
+	SportEmoji    string `json:"sport_emoji" example:"🧗"`
+	GoalPerPeriod *int   `json:"goal_per_period" example:"2" minimum:"1" maximum:"100"`
+}
+
+func (req *UpdateMembershipRequest) validate() string {
+	req.SportName = strings.TrimSpace(req.SportName)
+	switch {
+	case len(req.SportName) > 32:
+		return "sport_name must be at most 32 chars"
+	case req.SportEmoji != "" && !domain.IsSportEmoji(req.SportEmoji):
+		return "sport_emoji must be a sport emoji"
+	case req.GoalPerPeriod != nil && (*req.GoalPerPeriod < 1 || *req.GoalPerPeriod > 100):
+		return "goal_per_period must be 1..100"
+	}
+	return ""
+}
+
 type RoomDetailResponse struct {
 	Room    domain.Room     `json:"room"`
 	Members []domain.Member `json:"members"`
@@ -159,6 +180,43 @@ func (s *Server) handleUpdateRoom(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, updated)
+}
+
+// handleUpdateMembership godoc
+//
+//	@Summary		Update my settings in a room
+//	@Description	Sets the member's personal sport and workout goal for this room. Null goal falls back to the room goal, empty strings clear the sport.
+//	@Tags			rooms
+//	@Security		BearerAuth
+//	@Accept			json
+//	@Param			id		path	int							true	"room id"
+//	@Param			body	body	UpdateMembershipRequest	true	"personal settings"
+//	@Success		204
+//	@Failure		400	{object}	ErrorResponse
+//	@Failure		401	{object}	ErrorResponse
+//	@Failure		403	{object}	ErrorResponse
+//	@Failure		404	{object}	ErrorResponse
+//	@Failure		500	{object}	ErrorResponse
+//	@Router			/rooms/{id}/membership [patch]
+func (s *Server) handleUpdateMembership(w http.ResponseWriter, r *http.Request) {
+	room, ok := s.membership(w, r)
+	if !ok {
+		return
+	}
+	var req UpdateMembershipRequest
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	if msg := req.validate(); msg != "" {
+		writeErr(w, http.StatusBadRequest, msg)
+		return
+	}
+	if err := s.rooms.UpdateMembership(r.Context(), room.ID, userFrom(r.Context()).ID,
+		req.SportName, req.SportEmoji, req.GoalPerPeriod); err != nil {
+		s.mapError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // handleDeleteRoom godoc

@@ -33,6 +33,7 @@ type RoomsRepo interface {
 	ListOpen(ctx context.Context, userID int64) ([]domain.Room, error)
 	Members(ctx context.Context, roomID int64) ([]domain.Member, error)
 	IsMember(ctx context.Context, roomID, userID int64) (bool, error)
+	UpdateMembership(ctx context.Context, roomID, userID int64, sportName, sportEmoji string, goal *int) error
 	Join(ctx context.Context, roomID, userID int64) error
 	Leave(ctx context.Context, roomID, userID int64) error
 	AddAvatar(ctx context.Context, roomID, userID int64, key string) (domain.RoomAvatar, error)
@@ -195,6 +196,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/rooms/{id}/avatars", s.withAuth(s.handleListRoomAvatars))
 	mux.HandleFunc("GET /api/v1/rooms/{id}/avatars/{avatarId}", s.withAuth(s.handleGetRoomAvatarByID))
 	mux.HandleFunc("DELETE /api/v1/rooms/{id}/avatars/{avatarId}", s.withAuth(s.handleDeleteRoomAvatar))
+	mux.HandleFunc("PATCH /api/v1/rooms/{id}/membership", s.withAuth(s.handleUpdateMembership))
 	mux.HandleFunc("POST /api/v1/rooms/join", s.withAuth(s.handleJoinByCode))
 	mux.HandleFunc("POST /api/v1/rooms/{id}/join", s.withAuth(s.handleJoinRoom))
 	mux.HandleFunc("POST /api/v1/rooms/{id}/leave", s.withAuth(s.handleLeaveRoom))

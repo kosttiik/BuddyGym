@@ -93,8 +93,12 @@ definitions:
     properties:
       created_at:
         type: string
+      effective_goal:
+        type: integer
       first_name:
         type: string
+      goal_per_period:
+        type: integer
       has_avatar:
         description: clients read the bytes from GET /users/{id}/avatar, never from
           object storage directly
@@ -111,6 +115,12 @@ definitions:
         type: string
       rank:
         description: derived from the workout total, not settable
+        type: string
+      sport_emoji:
+        type: string
+      sport_name:
+        description: what the member trains and how often; empty/nil means the room
+          defaults apply
         type: string
       status_emoji:
         description: 'what the member writes about themselves: a single emoji plus
@@ -178,6 +188,10 @@ definitions:
       kind:
         type: string
       members_count:
+        type: integer
+      my_goal:
+        description: the viewer's personal goal in this room, falling back to the
+          room goal
         type: integer
       name:
         type: string
@@ -371,6 +385,20 @@ definitions:
         - dark
         - neon
         example: dark
+        type: string
+    type: object
+  httpapi.UpdateMembershipRequest:
+    properties:
+      goal_per_period:
+        example: 2
+        maximum: 100
+        minimum: 1
+        type: integer
+      sport_emoji:
+        example: "\U0001F9D7"
+        type: string
+      sport_name:
+        example: climbing
         type: string
     type: object
   httpapi.UpdateRoomRequest:
@@ -1584,6 +1612,52 @@ paths:
       security:
       - BearerAuth: []
       summary: Leave a room
+      tags:
+      - rooms
+  /rooms/{id}/membership:
+    patch:
+      consumes:
+      - application/json
+      description: Sets the member's personal sport and workout goal for this room.
+        Null goal falls back to the room goal, empty strings clear the sport.
+      parameters:
+      - description: room id
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: personal settings
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/httpapi.UpdateMembershipRequest'
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/httpapi.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update my settings in a room
       tags:
       - rooms
   /rooms/join:

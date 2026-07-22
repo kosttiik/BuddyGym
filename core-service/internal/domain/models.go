@@ -73,6 +73,8 @@ type RoomWithProgress struct {
 	Streak        int `json:"streak"`
 	// when the current period closes and the streak burns unless the goal is met
 	PeriodEndsAt time.Time `json:"period_ends_at"`
+	// the viewer's personal goal in this room, falling back to the room goal
+	MyGoal int `json:"my_goal"`
 }
 
 type Member struct {
@@ -81,6 +83,11 @@ type Member struct {
 	JoinedAt      time.Time `json:"joined_at"`
 	Streak        int       `json:"streak"`
 	PeriodEndsAt  time.Time `json:"period_ends_at"`
+	// what the member trains and how often; empty/nil means the room defaults apply
+	SportName     string `json:"sport_name"`
+	SportEmoji    string `json:"sport_emoji"`
+	GoalPerPeriod *int   `json:"goal_per_period"`
+	EffectiveGoal int    `json:"effective_goal"`
 }
 
 type Comment struct {
