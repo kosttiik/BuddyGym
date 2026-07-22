@@ -132,6 +132,36 @@ services:
       redis:
         condition: service_healthy
 
+  bot-migrate:
+    build: ./bot-service
+    command: uv run alembic upgrade head
+    environment: &bot_env
+      BOT_TOKEN: ${BOT_NOTIFY_TOKEN:-}
+      BOT_USERNAME: ${VITE_BOT_USERNAME:-buddygym_bot}
+      MINI_APP_SHORT_NAME: ${VITE_MINIAPP_NAME:-app}
+      BOT_MODE: ${BOT_MODE:-dry-run}
+      BOT_DB_DSN: postgres://${POSTGRES_USER:-buddygym}:${POSTGRES_PASSWORD:-buddygym}@postgres:5432/bot_db?sslmode=disable
+      CORE_DB_DSN: postgres://${POSTGRES_USER:-buddygym}:${POSTGRES_PASSWORD:-buddygym}@postgres:5432/core_db?sslmode=disable
+      CHECKIN_GRPC_ADDR: checkin:9091
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-buddygym}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-buddygym-secret}
+      S3_AVATAR_BUCKET: ${S3_AVATAR_BUCKET:-avatars}
+      S3_COMMENT_BUCKET: ${S3_COMMENT_BUCKET:-comment-photos}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  bot:
+    build: ./bot-service
+    restart: unless-stopped
+    environment: *bot_env
+    depends_on:
+      bot-migrate:
+        condition: service_completed_successfully
+      core:
+        condition: service_healthy
+
 volumes:
   pgdata:
   miniodata:

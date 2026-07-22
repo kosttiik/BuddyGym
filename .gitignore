@@ -106,3 +106,7 @@ AGENTS.md
 # nested repos, cloned locally (own git remotes)
 /frontend/
 /checkin-service/
+
+# bot service local artifacts
+/bot-service/out/
+/bot-service/.venv/
