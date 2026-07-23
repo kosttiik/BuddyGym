@@ -1268,7 +1268,11 @@ func TestEventsAreEmittedForBotNotifications(t *testing.T) {
 		t.Fatalf("freeze: %d %s", rec.Code, rec.Body.String())
 	}
 
-	want := []string{"member.joined", "checkin.created", "comment.created", "freeze.scheduled"}
+	if rec := e.do(t, "POST", fmt.Sprintf("/api/v1/rooms/%d/leave", room.ID), nil, reqOpts{userID: 2}); rec.Code != http.StatusNoContent {
+		t.Fatalf("leave: %d", rec.Code)
+	}
+
+	want := []string{"member.joined", "checkin.created", "comment.created", "freeze.scheduled", "member.left"}
 	if got := e.events.types(); !slices.Equal(got, want) {
 		t.Errorf("events = %v, want %v", got, want)
 	}

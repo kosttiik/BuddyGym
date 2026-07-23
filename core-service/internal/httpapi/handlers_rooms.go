@@ -480,9 +480,11 @@ func (s *Server) handleLeaveRoom(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid room id")
 		return
 	}
-	if err := s.rooms.Leave(r.Context(), id, userFrom(r.Context()).ID); err != nil {
+	userID := userFrom(r.Context()).ID
+	if err := s.rooms.Leave(r.Context(), id, userID); err != nil {
 		s.mapError(w, err)
 		return
 	}
+	s.emit(r.Context(), "member.left", id, userID, nil)
 	w.WriteHeader(http.StatusNoContent)
 }

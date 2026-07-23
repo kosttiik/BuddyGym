@@ -59,18 +59,27 @@ def test_unknown_events_are_ignored():
     assert recipients_for(event("room.renamed"), ROOM, None) == []
 
 
-def test_a_reply_goes_to_the_comment_author_not_the_photo_owner():
+def test_a_reply_reaches_the_author_and_the_photo_owner():
+    # the comment author gets a reply card, the photo owner still learns a comment landed
     deliveries = recipients_for(
         event("comment.created", actor=2, checkin_id="c1", reply_to_author_id=1), ROOM, 3
     )
 
-    assert [(d.chat_id, d.kind) for d in deliveries] == [(1, "reply")]
+    assert [(d.chat_id, d.kind) for d in deliveries] == [(1, "reply"), (3, "comment")]
 
 
-def test_replying_to_yourself_notifies_nobody():
-    assert (
-        recipients_for(
-            event("comment.created", actor=2, checkin_id="c1", reply_to_author_id=2), ROOM, 3
-        )
-        == []
+def test_replying_to_your_own_comment_still_tells_the_photo_owner():
+    deliveries = recipients_for(
+        event("comment.created", actor=2, checkin_id="c1", reply_to_author_id=2), ROOM, 3
     )
+
+    assert [(d.chat_id, d.kind) for d in deliveries] == [(3, "comment")]
+
+
+def test_a_reply_to_the_photo_owner_is_not_doubled():
+    # owner is the comment author too: one reply card, no duplicate comment card
+    deliveries = recipients_for(
+        event("comment.created", actor=2, checkin_id="c1", reply_to_author_id=3), ROOM, 3
+    )
+
+    assert [(d.chat_id, d.kind) for d in deliveries] == [(3, "reply")]
