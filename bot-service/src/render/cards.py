@@ -282,7 +282,7 @@ def digest_card(data: CardData) -> bytes:
     row_top = y + 34
     for label, count, _ in data.lines[:5]:
         draw.ellipse((PADDING, row_top + 14, PADDING + 16, row_top + 30), fill=GREEN)
-        draw.text((PADDING + 38, row_top), label, font=semibold(32), fill=INK)
+        draw_text_with_emoji(canvas, draw, (PADDING + 38, row_top), label, semibold(32), INK)
         if count:
             draw.text(
                 (CARD_WIDTH - PADDING, row_top),
