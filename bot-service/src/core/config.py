@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     poll_interval_seconds: float = Field(default=5, validation_alias="POLL_INTERVAL_SECONDS", gt=0)
     batch_size: int = Field(default=200, validation_alias="EVENT_BATCH_SIZE", ge=1, le=1000)
     send_workers: int = Field(default=4, validation_alias="SEND_WORKERS", ge=1, le=32)
+    max_send_attempts: int = Field(default=5, validation_alias="MAX_SEND_ATTEMPTS", ge=1)
     # Telegram allows 30 messages a second overall and one a second per chat
     global_rate: int = Field(default=25, validation_alias="GLOBAL_RATE", ge=1, le=30)
     # events older than this are folded into one digest instead of a burst of messages

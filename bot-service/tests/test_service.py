@@ -178,3 +178,36 @@ async def test_a_member_behind_the_goal_gets_a_reminder_unless_frozen(env):
         )
 
     assert await service.queue_reminders() == 2
+
+
+async def test_reminders_do_not_crash_on_a_second_daily_run(env):
+    """The unique (event_id, chat_id, kind) key used to collide on the second cron run and
+    crash the whole batch. A per-day event id makes the repeat a no-op instead."""
+    service, _, engine, sessions = env
+    async with engine.begin() as conn:
+        await conn.execute(
+            text("UPDATE memberships SET joined_at = now() - interval '6 days' WHERE room_id = 7")
+        )
+
+    assert await service.queue_reminders() == 3
+    # same day again: no new rows, and no IntegrityError
+    assert await service.queue_reminders() == 3
+
+    async with sessions() as session:
+        count = (
+            await session.execute(
+                text("SELECT count(*) FROM notifications WHERE kind = 'reminder'")
+            )
+        ).scalar_one()
+    assert count == 3
+
+
+async def test_a_welcome_card_is_queued_once_per_user(env):
+    service, sender, _, sessions = env
+
+    await service.queue_welcome(999, "ru")
+    await service.queue_welcome(999, "ru")
+    await service.deliver_pending()
+
+    welcomes = [item for item in sender.sent if item.kind == "welcome"]
+    assert [item.chat_id for item in welcomes] == [999]

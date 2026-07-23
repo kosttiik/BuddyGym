@@ -87,6 +87,9 @@ func (s *Server) handleCreateCheckin(w http.ResponseWriter, r *http.Request) {
 	var buddyIDs []int64
 	// set by the client after the user confirmed replacing today's checkin
 	replace := r.URL.Query().Get("replace") == "true"
+	// the client passes its Date.getTimezoneOffset() so "today" is the user's calendar day,
+	// not a UTC day: an evening and a next-morning workout must read as two different days
+	tzOffset := parseTZOffset(r.URL.Query().Get("tz_offset"))
 
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
 		r.Body = http.MaxBytesReader(w, r.Body, maxPhotoSize+1<<20)
@@ -139,7 +142,7 @@ func (s *Server) handleCreateCheckin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	existing, err := s.todaysCheckins(r.Context(), user.ID, targets)
+	existing, err := s.todaysCheckins(r.Context(), user.ID, targets, tzOffset)
 	if err != nil {
 		s.mapError(w, err)
 		return
@@ -192,31 +195,55 @@ type DuplicateCheckinResponse struct {
 	Existing []checkin.Checkin `json:"existing"`
 }
 
-// todaysCheckins finds the user's live checkins made on the same calendar day in the target
-// rooms. The day boundary is the date, not 24 hours: an evening and a next-morning workout
-// are two different days.
-func (s *Server) todaysCheckins(ctx context.Context, userID int64, targets []checkin.Target) ([]checkin.Checkin, error) {
-	today := s.now().UTC().Format(time.DateOnly)
+// parseTZOffset reads a JS getTimezoneOffset() value (minutes behind UTC, MSK = -180),
+// clamped to a real range; anything invalid falls back to UTC.
+func parseTZOffset(raw string) time.Duration {
+	if raw == "" {
+		return 0
+	}
+	m, err := strconv.Atoi(raw)
+	if err != nil || m < -14*60 || m > 14*60 {
+		return 0
+	}
+	return time.Duration(m) * time.Minute
+}
+
+func (s *Server) todaysCheckins(ctx context.Context, userID int64, targets []checkin.Target, tzOffset time.Duration) ([]checkin.Checkin, error) {
+	// local = UTC - offset; JS offset is negative east of UTC, so subtracting shifts forward
+	localNow := s.now().UTC().Add(-tzOffset)
+	today := localNow.Format(time.DateOnly)
 	seen := map[string]struct{}{}
 	var out []checkin.Checkin
+	const page = 100
 	for _, target := range targets {
 		for _, status := range []pbv1.CheckinStatus{
 			pbv1.CheckinStatus_CHECKIN_STATUS_PENDING,
 			pbv1.CheckinStatus_CHECKIN_STATUS_APPROVED,
 		} {
-			list, err := s.checkins.List(ctx, target.RoomID, status, 100, 0)
-			if err != nil {
-				return nil, err
-			}
-			for _, c := range list {
-				if c.UserID != userID || c.CreatedAt.UTC().Format(time.DateOnly) != today {
-					continue
+			// results are newest first, so stop the moment a page predates today
+			for offset := int32(0); ; offset += page {
+				list, err := s.checkins.List(ctx, target.RoomID, status, page, offset)
+				if err != nil {
+					return nil, err
 				}
-				if _, dup := seen[c.ID]; dup {
-					continue
+				stop := len(list) < page
+				for _, c := range list {
+					day := c.CreatedAt.UTC().Add(-tzOffset).Format(time.DateOnly)
+					if day < today {
+						stop = true
+						continue
+					}
+					if c.UserID != userID || day != today {
+						continue
+					}
+					if _, dup := seen[c.ID]; !dup {
+						seen[c.ID] = struct{}{}
+						out = append(out, c)
+					}
 				}
-				seen[c.ID] = struct{}{}
-				out = append(out, c)
+				if stop {
+					break
+				}
 			}
 		}
 	}

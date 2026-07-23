@@ -60,12 +60,11 @@ async def main() -> None:
 
         @dispatcher.message(CommandStart())
         async def on_start(message: Message) -> None:
-            # a /start is the moment the chat becomes writable: flush what was held back
+            # a /start is the moment the chat becomes writable: flush what was held back and
+            # greet with a branded card, once per user
             await service.mark_reachable(message.chat.id)
-            await message.answer(
-                "BuddyGym на связи. Буду присылать комментарии к вашим фото, "
-                "результаты голосований, достижения и напоминания перед концом периода."
-            )
+            language = (message.from_user.language_code or "ru").split("-")[0]
+            await service.queue_welcome(message.chat.id, "en" if language == "en" else "ru")
 
         @dispatcher.message(F.text)
         async def on_any(message: Message) -> None:

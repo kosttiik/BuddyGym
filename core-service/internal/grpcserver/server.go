@@ -147,7 +147,20 @@ func (s *Server) creditBuddies(ctx context.Context, checkinID string, roomID int
 		if _, err := s.reward(ctx, buddyID); err != nil {
 			s.log.Error("grant rewards", "err", err, "user_id", buddyID)
 		}
-		s.emit(ctx, "buddy.credited", roomID, buddyID, map[string]any{"checkin_id": checkinID})
+		// the card draws a progress bar, so the buddy's own period count travels with the event
+		done, err := s.results.PeriodCount(ctx, roomID, buddyID)
+		if err != nil {
+			s.log.Error("period count", "err", err, "user_id", buddyID)
+		}
+		goal := 0
+		if room, err := s.rooms.Get(ctx, roomID); err == nil {
+			goal = room.GoalPerPeriod
+		}
+		s.emit(ctx, "buddy.credited", roomID, buddyID, map[string]any{
+			"checkin_id": checkinID,
+			"done":       done,
+			"goal":       goal,
+		})
 	}
 	return nil
 }

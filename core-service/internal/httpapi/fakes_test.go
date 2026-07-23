@@ -118,7 +118,6 @@ func (f *fakeUsers) UpdateTheme(_ context.Context, id int64, theme string) (doma
 	return u, nil
 }
 
-
 func (f *fakeUsers) UpdateLanguage(_ context.Context, id int64, language string) (domain.User, error) {
 	u, ok := f.users[id]
 	if !ok {

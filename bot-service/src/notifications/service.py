@@ -43,6 +43,11 @@ class NotificationService:
         self._log = logger or logging.getLogger(__name__)
         self._now = now
 
+    def _day_id(self) -> int:
+        """A synthetic event id derived from the date, so bot-generated cards (digest,
+        reminder) dedup within a day but a new day produces a fresh card."""
+        return int(self._now().strftime("%Y%m%d"))
+
     async def ingest(self) -> int:
         """Turn new outbox rows into pending notifications. Returns how many were queued."""
         async with self._sessions() as session:
@@ -144,14 +149,16 @@ class NotificationService:
                 per_chat[row.chat_id][row.kind] += 1
                 row.status = DeliveryStatus.SKIPPED
 
+            day = self._day_id()
             for chat_id, counts in per_chat.items():
                 lines = [
                     [DIGEST_LABELS.get(kind, kind), count, 0]
                     for kind, count in counts.most_common(5)
                 ]
-                session.add(
-                    Notification(
-                        event_id=0,
+                await session.execute(
+                    insert(Notification)
+                    .values(
+                        event_id=day,
                         chat_id=chat_id,
                         kind="digest",
                         payload=json.dumps(
@@ -161,6 +168,7 @@ class NotificationService:
                         status=DeliveryStatus.PENDING,
                         event_created_at=self._now(),
                     )
+                    .on_conflict_do_nothing()
                 )
             await session.commit()
             return len(per_chat)
@@ -189,7 +197,7 @@ class NotificationService:
                 .all()
             )
             items = [
-                Outgoing(row.id, row.chat_id, row.kind, json.loads(row.payload))
+                Outgoing(row.id, row.chat_id, row.kind, json.loads(row.payload), row.attempts)
                 for row in rows
                 if row.chat_id not in unreachable
             ]
@@ -208,7 +216,12 @@ class NotificationService:
                 values["sent_at"] = self._now()
                 values["message_id"] = result.message_id
             if result.status == DeliveryStatus.PENDING:
+                # a rate-limit retry: bump the attempt count and give up after the cap so a
+                # permanently stuck card cannot loop forever
                 values.pop("status")
+                values["attempts"] = Notification.attempts + 1
+                if result.attempts + 1 >= self._settings.max_send_attempts:
+                    values["status"] = DeliveryStatus.FAILED
             await session.execute(
                 update(Notification)
                 .where(Notification.id == result.notification_id)
@@ -223,6 +236,23 @@ class NotificationService:
                         set_={"reachable": False, "updated_at": self._now()},
                     )
                 )
+            await session.commit()
+
+    async def queue_welcome(self, user_id: int, language: str = "ru") -> None:
+        """A one-time welcome card. event_id -1 with the unique key fires it once per user."""
+        async with self._sessions() as session:
+            await session.execute(
+                insert(Notification)
+                .values(
+                    event_id=-1,
+                    chat_id=user_id,
+                    kind="welcome",
+                    payload=json.dumps({"language": language}, ensure_ascii=False),
+                    status=DeliveryStatus.PENDING,
+                    event_created_at=self._now(),
+                )
+                .on_conflict_do_nothing()
+            )
             await session.commit()
 
     async def mark_reachable(self, user_id: int) -> None:
@@ -258,11 +288,13 @@ class NotificationService:
             )
             per_user[row.user_id].append([label, row.workouts_count, row.goal])
 
+        day = self._day_id()
         async with self._sessions() as session:
             for user_id, lines in per_user.items():
-                session.add(
-                    Notification(
-                        event_id=0,
+                await session.execute(
+                    insert(Notification)
+                    .values(
+                        event_id=day,
                         chat_id=user_id,
                         kind="reminder",
                         payload=json.dumps(
@@ -271,6 +303,7 @@ class NotificationService:
                         status=DeliveryStatus.PENDING,
                         event_created_at=self._now(),
                     )
+                    .on_conflict_do_nothing()
                 )
             await session.commit()
         return len(per_user)

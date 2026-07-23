@@ -33,6 +33,7 @@ class Outgoing:
     chat_id: int
     kind: str
     payload: dict[str, Any]
+    attempts: int = 0
 
 
 @dataclass(slots=True)
@@ -41,6 +42,7 @@ class SendResult:
     status: str
     message_id: int | None = None
     error: str | None = None
+    attempts: int = 0
 
 
 class Sender:
@@ -125,7 +127,7 @@ class Sender:
                 return SendResult(item.id, "unreachable", error=str(error))
             except TelegramRetryAfter as error:
                 await asyncio.sleep(error.retry_after)
-                return SendResult(item.id, "pending", error=str(error))
+                return SendResult(item.id, "pending", error=str(error), attempts=item.attempts)
             except Exception as error:
                 self._log.exception("send placeholder failed", exc_info=error)
                 return SendResult(item.id, "failed", error=str(error))

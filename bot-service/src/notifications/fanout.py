@@ -28,13 +28,17 @@ def recipients_for(event: Event, room: RoomContext, checkin_owner: int | None) -
 
     match event.type:
         case "comment.created":
-            # a reply belongs to the comment author, everything else to the photo owner
-            if parent_author := event.subject.get("reply_to_author_id"):
-                if int(parent_author) != event.actor_id:
-                    return [Delivery(int(parent_author), "reply", base)]
-                return []
-            target = checkin_owner if checkin_owner and checkin_owner != event.actor_id else None
-            return [Delivery(target, "comment", base)] if target else []
+            # a reply reaches the comment author as a reply, and the photo owner still learns
+            # a new comment landed, unless they are the actor or already the reply target
+            out: list[Delivery] = []
+            seen: set[int] = {event.actor_id}
+            parent_author = event.subject.get("reply_to_author_id")
+            if parent_author and int(parent_author) not in seen:
+                out.append(Delivery(int(parent_author), "reply", base))
+                seen.add(int(parent_author))
+            if checkin_owner and checkin_owner not in seen:
+                out.append(Delivery(checkin_owner, "comment", base))
+            return out
 
         case "checkin.created":
             # only members who can still vote need to see it
