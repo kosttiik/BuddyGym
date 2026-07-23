@@ -26,7 +26,8 @@ class Settings(BaseSettings):
 
     bot_token: str = Field(default="", validation_alias="BOT_TOKEN")
     bot_username: str = Field(default="buddygym_bot", validation_alias="BOT_USERNAME")
-    mini_app_short_name: str = Field(default="app", validation_alias="MINI_APP_SHORT_NAME")
+    # empty unless the bot serves a named Mini App: without one the link is t.me/<bot>?startapp=
+    mini_app_short_name: str = Field(default="", validation_alias="MINI_APP_SHORT_NAME")
     # dry-run renders every card to disk and sends nothing: the way to review a change
     # before it reaches real chats
     mode: BotMode = Field(default=BotMode.DRY_RUN, validation_alias="BOT_MODE")
@@ -61,4 +62,6 @@ class Settings(BaseSettings):
 
     @property
     def mini_app_url(self) -> str:
-        return f"https://t.me/{self.bot_username}/{self.mini_app_short_name}"
+        if self.mini_app_short_name:
+            return f"https://t.me/{self.bot_username}/{self.mini_app_short_name}"
+        return f"https://t.me/{self.bot_username}"
