@@ -213,11 +213,25 @@ func (f *fakeComments) view(c domain.Comment, viewerID int64) domain.Comment {
 	return c
 }
 
-func (f *fakeComments) Add(_ context.Context, checkinID string, roomID, userID int64, body, photoKey string) (domain.Comment, error) {
+func (f *fakeComments) Add(_ context.Context, checkinID string, roomID, userID int64, body, photoKey string, replyTo *int64) (domain.Comment, error) {
+	if replyTo != nil && !slices.ContainsFunc(f.byCheckin[checkinID], func(c domain.Comment) bool {
+		return c.ID == *replyTo
+	}) {
+		return domain.Comment{}, storage.ErrNotFound
+	}
 	f.nextID++
 	c := domain.Comment{
 		ID: f.nextID, CheckinID: checkinID, UserID: userID,
 		Author: f.users.users[userID], Body: body, PhotoKey: photoKey, CreatedAt: time.Now(),
+		ReplyTo: replyTo,
+	}
+	if replyTo != nil {
+		for _, parent := range f.byCheckin[checkinID] {
+			if parent.ID == *replyTo {
+				c.ReplyToAuthor = parent.Author.FirstName
+				c.ReplyToBody = parent.Body
+			}
+		}
 	}
 	f.byCheckin[checkinID] = append(f.byCheckin[checkinID], c)
 	f.rooms.commentRoom[c.ID] = roomID

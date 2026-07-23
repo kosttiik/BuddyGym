@@ -59,7 +59,7 @@ type BuddiesRepo interface {
 }
 
 type CommentsRepo interface {
-	Add(ctx context.Context, checkinID string, roomID, userID int64, body, photoKey string) (domain.Comment, error)
+	Add(ctx context.Context, checkinID string, roomID, userID int64, body, photoKey string, replyTo *int64) (domain.Comment, error)
 	Get(ctx context.Context, id, viewerID int64) (domain.Comment, error)
 	List(ctx context.Context, checkinID string, viewerID int64, limit, offset int) ([]domain.Comment, error)
 	Delete(ctx context.Context, id, userID int64) (photoKey string, err error)

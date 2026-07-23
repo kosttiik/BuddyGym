@@ -23,15 +23,22 @@ const commentColumns = `
 	c.id, c.checkin_id, c.user_id, c.body, c.photo_key, c.created_at,
 	u.first_name, u.username, u.photo_url, u.avatar_key,
 	(SELECT count(*)::int FROM checkin_comment_likes l WHERE l.comment_id = c.id),
-	EXISTS (SELECT 1 FROM checkin_comment_likes l WHERE l.comment_id = c.id AND l.user_id = $2)`
+	EXISTS (SELECT 1 FROM checkin_comment_likes l WHERE l.comment_id = c.id AND l.user_id = $2),
+	c.reply_to,
+	COALESCE(p.first_name, ''), COALESCE(pc.body, ''), (pc.photo_key IS NOT NULL AND pc.photo_key <> '')`
 
 func scanComment(row pgx.Row) (domain.Comment, error) {
 	var c domain.Comment
+	var parentPhoto bool
 	err := row.Scan(&c.ID, &c.CheckinID, &c.UserID, &c.Body, &c.PhotoKey, &c.CreatedAt,
 		&c.Author.FirstName, &c.Author.Username, &c.Author.PhotoURL, &c.Author.AvatarKey,
-		&c.Likes, &c.LikedByMe)
+		&c.Likes, &c.LikedByMe,
+		&c.ReplyTo, &c.ReplyToAuthor, &c.ReplyToBody, &parentPhoto)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Comment{}, ErrNotFound
+	}
+	if c.ReplyTo != nil && c.ReplyToBody == "" && parentPhoto {
+		c.ReplyToBody = "photo"
 	}
 	c.Author.ID = c.UserID
 	c.Author.HasAvatar = c.Author.AvatarKey != ""
@@ -39,12 +46,19 @@ func scanComment(row pgx.Row) (domain.Comment, error) {
 	return c, err
 }
 
-func (r *Comments) Add(ctx context.Context, checkinID string, roomID, userID int64, body, photoKey string) (domain.Comment, error) {
+func (r *Comments) Add(ctx context.Context, checkinID string, roomID, userID int64, body, photoKey string, replyTo *int64) (domain.Comment, error) {
 	var id int64
+	// a reply must stay inside the thread it answers, else it would quote a stranger's photo
 	err := r.pool.QueryRow(ctx, `
-		INSERT INTO checkin_comments (checkin_id, room_id, user_id, body, photo_key)
-		VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-		checkinID, roomID, userID, body, photoKey).Scan(&id)
+		INSERT INTO checkin_comments (checkin_id, room_id, user_id, body, photo_key, reply_to)
+		SELECT $1, $2, $3, $4, $5, $6
+		WHERE $6::bigint IS NULL
+		   OR EXISTS (SELECT 1 FROM checkin_comments p WHERE p.id = $6 AND p.checkin_id = $1)
+		RETURNING id`,
+		checkinID, roomID, userID, body, photoKey, replyTo).Scan(&id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.Comment{}, ErrNotFound
+	}
 	if err != nil {
 		return domain.Comment{}, err
 	}
@@ -55,6 +69,8 @@ func (r *Comments) Get(ctx context.Context, id, viewerID int64) (domain.Comment,
 	return scanComment(r.pool.QueryRow(ctx, `
 		SELECT `+commentColumns+`
 		FROM checkin_comments c JOIN users u ON u.id = c.user_id
+		LEFT JOIN checkin_comments pc ON pc.id = c.reply_to
+		LEFT JOIN users p ON p.id = pc.user_id
 		WHERE c.id = $1`, id, viewerID))
 }
 
@@ -62,6 +78,8 @@ func (r *Comments) List(ctx context.Context, checkinID string, viewerID int64, l
 	rows, err := r.pool.Query(ctx, `
 		SELECT `+commentColumns+`
 		FROM checkin_comments c JOIN users u ON u.id = c.user_id
+		LEFT JOIN checkin_comments pc ON pc.id = c.reply_to
+		LEFT JOIN users p ON p.id = pc.user_id
 		WHERE c.checkin_id = $1
 		ORDER BY c.created_at
 		LIMIT $3 OFFSET $4`, checkinID, viewerID, limit, offset)
@@ -139,6 +157,8 @@ func (r *Comments) Summaries(ctx context.Context, checkinIDs []string, viewerID 
 	top, err := r.pool.Query(ctx, `
 		SELECT DISTINCT ON (c.checkin_id) `+commentColumns+`
 		FROM checkin_comments c JOIN users u ON u.id = c.user_id
+		LEFT JOIN checkin_comments pc ON pc.id = c.reply_to
+		LEFT JOIN users p ON p.id = pc.user_id
 		WHERE c.checkin_id = ANY($1)
 		ORDER BY c.checkin_id,
 		         (SELECT count(*) FROM checkin_comment_likes l WHERE l.comment_id = c.id) DESC,

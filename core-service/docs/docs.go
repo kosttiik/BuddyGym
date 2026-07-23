@@ -2309,6 +2309,16 @@ const docTemplate = `{
                 "likes": {
                     "type": "integer"
                 },
+                "reply_to": {
+                    "type": "integer"
+                },
+                "reply_to_author": {
+                    "description": "the quoted line the reply answers, resolved so the client needs no second lookup",
+                    "type": "string"
+                },
+                "reply_to_body": {
+                    "type": "string"
+                },
                 "user_id": {
                     "type": "integer"
                 }
@@ -2611,6 +2621,11 @@ const docTemplate = `{
                 "body": {
                     "type": "string",
                     "example": "Красавчик"
+                },
+                "reply_to": {
+                    "description": "id of the comment this one answers, omitted for a top-level comment",
+                    "type": "integer",
+                    "example": 12
                 }
             }
         },

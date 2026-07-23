@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
@@ -8,12 +9,15 @@ import (
 
 	"github.com/kosttiik/BuddyGym/core-service/internal/checkin"
 	"github.com/kosttiik/BuddyGym/core-service/internal/domain"
+	"github.com/kosttiik/BuddyGym/core-service/internal/storage"
 )
 
 const maxCommentPhoto = 5 << 20
 
 type CommentRequest struct {
 	Body string `json:"body" example:"Красавчик"`
+	// id of the comment this one answers, omitted for a top-level comment
+	ReplyTo *int64 `json:"reply_to,omitempty" example:"12"`
 }
 
 func (s *Server) checkinRoom(w http.ResponseWriter, r *http.Request) (checkin.Checkin, bool) {
@@ -104,6 +108,7 @@ func (s *Server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 
 	var rawBody string
 	var photo []byte
+	var replyTo *int64
 
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
 		r.Body = http.MaxBytesReader(w, r.Body, maxCommentPhoto+1<<20)
@@ -112,6 +117,14 @@ func (s *Server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		rawBody = r.FormValue("body")
+		if raw := r.FormValue("reply_to"); raw != "" {
+			parsed, err := strconv.ParseInt(raw, 10, 64)
+			if err != nil {
+				writeErr(w, http.StatusBadRequest, "invalid reply_to")
+				return
+			}
+			replyTo = &parsed
+		}
 
 		if file, _, err := r.FormFile("photo"); err == nil {
 			defer file.Close()
@@ -135,6 +148,7 @@ func (s *Server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		rawBody = req.Body
+		replyTo = req.ReplyTo
 	}
 
 	body, err := domain.NormalizeCommentBody(rawBody, len(photo) > 0)
@@ -156,10 +170,14 @@ func (s *Server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	comment, err := s.comments.Add(r.Context(), target.ID, target.RoomID, user.ID, body, photoKey)
+	comment, err := s.comments.Add(r.Context(), target.ID, target.RoomID, user.ID, body, photoKey, replyTo)
 	if err != nil {
 		if photoKey != "" {
 			s.commentPhotos.Delete(r.Context(), photoKey)
+		}
+		if errors.Is(err, storage.ErrNotFound) {
+			writeErr(w, http.StatusBadRequest, "reply target is not in this thread")
+			return
 		}
 		s.internal(w, err)
 		return
@@ -169,6 +187,7 @@ func (s *Server) handleAddComment(w http.ResponseWriter, r *http.Request) {
 		"comment_id": comment.ID,
 		"body":       comment.Body,
 		"has_photo":  comment.HasPhoto,
+		"reply_to":   comment.ReplyTo,
 	})
 	writeJSON(w, http.StatusCreated, comment)
 }

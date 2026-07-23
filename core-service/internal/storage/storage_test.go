@@ -646,7 +646,7 @@ func TestCommentsDeletePermissions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mine, err := comments.Add(ctx, "chk-c1", room.ID, 502, "nice", "")
+	mine, err := comments.Add(ctx, "chk-c1", room.ID, 502, "nice", "", nil)
 	if err != nil {
 		t.Fatalf("Add: %v", err)
 	}
@@ -663,7 +663,7 @@ func TestCommentsDeletePermissions(t *testing.T) {
 	}
 
 	// a deleted comment must report its photo so the object can go too
-	withPhoto, err := comments.Add(ctx, "chk-c1", room.ID, 502, "", "comments/abc")
+	withPhoto, err := comments.Add(ctx, "chk-c1", room.ID, 502, "", "comments/abc", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -690,11 +690,11 @@ func TestCommentLikesAndTopComment(t *testing.T) {
 		}
 	}
 
-	quiet, err := comments.Add(ctx, "chk-c2", room.ID, 512, "first", "")
+	quiet, err := comments.Add(ctx, "chk-c2", room.ID, 512, "first", "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	loud, err := comments.Add(ctx, "chk-c2", room.ID, 513, "second", "")
+	loud, err := comments.Add(ctx, "chk-c2", room.ID, 513, "second", "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -871,7 +871,7 @@ func TestEventsBackfillCoversExistingRows(t *testing.T) {
 	mustUser(t, 113)
 	room := mustRoom(t, 113)
 
-	if _, err := comments.Add(ctx, "chk-backfill", room.ID, 113, "old comment", ""); err != nil {
+	if _, err := comments.Add(ctx, "chk-backfill", room.ID, 113, "old comment", "", nil); err != nil {
 		t.Fatalf("seed comment: %v", err)
 	}
 	if _, err := results.Apply(ctx, "chk-backfill", room.ID, 113, storage.ResultApproved, time.Now()); err != nil {
@@ -907,5 +907,43 @@ func TestEventsBackfillCoversExistingRows(t *testing.T) {
 		if n == 0 {
 			t.Errorf("backfill produced no %s event", want)
 		}
+	}
+}
+
+func TestCommentsReplyStaysInsideItsThread(t *testing.T) {
+	ctx := context.Background()
+	comments := storage.NewComments(pool(t))
+	mustUser(t, 520)
+	mustUser(t, 521)
+	room := mustRoom(t, 520)
+
+	parent, err := comments.Add(ctx, "chk-r1", room.ID, 520, "как ощущения?", "", nil)
+	if err != nil {
+		t.Fatalf("parent: %v", err)
+	}
+	reply, err := comments.Add(ctx, "chk-r1", room.ID, 521, "тяжело, но живой", "", &parent.ID)
+	if err != nil {
+		t.Fatalf("reply: %v", err)
+	}
+	if reply.ReplyTo == nil || *reply.ReplyTo != parent.ID {
+		t.Fatalf("reply_to = %v, want %d", reply.ReplyTo, parent.ID)
+	}
+	// the quote travels with the reply so the client needs no extra lookup
+	if reply.ReplyToAuthor != parent.Author.FirstName || reply.ReplyToBody != parent.Body {
+		t.Errorf("quote = %q/%q, want %q/%q",
+			reply.ReplyToAuthor, reply.ReplyToBody, parent.Author.FirstName, parent.Body)
+	}
+
+	// answering a comment that lives under a different photo is refused
+	if _, err := comments.Add(ctx, "chk-r2", room.ID, 521, "мимо", "", &parent.ID); !errors.Is(err, storage.ErrNotFound) {
+		t.Errorf("cross-thread reply err = %v, want ErrNotFound", err)
+	}
+
+	list, err := comments.List(ctx, "chk-r1", 521, 50, 0)
+	if err != nil || len(list) != 2 {
+		t.Fatalf("List: %v, len=%d", err, len(list))
+	}
+	if list[1].ReplyToBody != parent.Body {
+		t.Errorf("listed reply lost its quote: %+v", list[1])
 	}
 }

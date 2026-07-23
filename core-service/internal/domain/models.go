@@ -95,6 +95,10 @@ type Comment struct {
 	Likes     int       `json:"likes"`
 	LikedByMe bool      `json:"liked_by_me"`
 	CreatedAt time.Time `json:"created_at"`
+	ReplyTo   *int64    `json:"reply_to,omitempty"`
+	// the quoted line the reply answers, resolved so the client needs no second lookup
+	ReplyToAuthor string `json:"reply_to_author,omitempty"`
+	ReplyToBody   string `json:"reply_to_body,omitempty"`
 }
 
 type CommentSummary struct {

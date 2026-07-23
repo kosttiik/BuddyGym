@@ -80,6 +80,14 @@ definitions:
         type: boolean
       likes:
         type: integer
+      reply_to:
+        type: integer
+      reply_to_author:
+        description: the quoted line the reply answers, resolved so the client needs
+          no second lookup
+        type: string
+      reply_to_body:
+        type: string
       user_id:
         type: integer
     type: object
@@ -279,6 +287,10 @@ definitions:
       body:
         example: Красавчик
         type: string
+      reply_to:
+        description: id of the comment this one answers, omitted for a top-level comment
+        example: 12
+        type: integer
     type: object
   httpapi.CreateCheckinGeoRequest:
     properties:
