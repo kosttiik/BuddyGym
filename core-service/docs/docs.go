@@ -2328,6 +2328,9 @@ const docTemplate = `{
                     "description": "the quoted line the reply answers, resolved so the client needs no second lookup",
                     "type": "string"
                 },
+                "reply_to_author_id": {
+                    "type": "integer"
+                },
                 "reply_to_body": {
                     "type": "string"
                 },
@@ -2393,6 +2396,9 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "joined_at": {
+                    "type": "string"
+                },
+                "language": {
                     "type": "string"
                 },
                 "last_closed_period_failed": {
@@ -2575,6 +2581,9 @@ const docTemplate = `{
                 },
                 "id": {
                     "type": "integer"
+                },
+                "language": {
+                    "type": "string"
                 },
                 "photo_url": {
                     "type": "string"
@@ -2800,6 +2809,14 @@ const docTemplate = `{
         "httpapi.UpdateMeRequest": {
             "type": "object",
             "properties": {
+                "language": {
+                    "type": "string",
+                    "enum": [
+                        "ru",
+                        "en"
+                    ],
+                    "example": "ru"
+                },
                 "status_emoji": {
                     "type": "string"
                 },

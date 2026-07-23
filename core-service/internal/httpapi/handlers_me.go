@@ -18,6 +18,7 @@ type MeResponse struct {
 
 type UpdateMeRequest struct {
 	Theme       *string `json:"theme,omitempty" example:"dark" enums:"default,dark,neon"`
+	Language    *string `json:"language,omitempty" example:"ru" enums:"ru,en"`
 	StatusEmoji *string `json:"status_emoji,omitempty"`
 	StatusText  *string `json:"status_text,omitempty" example:"На массе"`
 }
@@ -90,6 +91,19 @@ func (s *Server) handlePatchMe(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		updated, err := s.users.UpdateTheme(r.Context(), userID, *req.Theme)
+		if err != nil {
+			s.mapError(w, err)
+			return
+		}
+		user = updated
+	}
+
+	if req.Language != nil {
+		if *req.Language != "ru" && *req.Language != "en" {
+			writeErr(w, http.StatusBadRequest, "unknown language")
+			return
+		}
+		updated, err := s.users.UpdateLanguage(r.Context(), userID, *req.Language)
 		if err != nil {
 			s.mapError(w, err)
 			return

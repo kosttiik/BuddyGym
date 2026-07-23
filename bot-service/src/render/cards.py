@@ -57,6 +57,8 @@ class CardData:
     accent: tuple[int, int, int] = GREEN_DEEP
     footer: str = ""
     badge: str = ""
+    quote_author: str = ""
+    quote_body: str = ""
     lines: list[tuple[str, int, int]] = field(default_factory=list)
 
 
@@ -116,7 +118,13 @@ def comment_card(data: CardData) -> bytes:
     inner = PADDING + 36
     body_width = CARD_WIDTH - PADDING * 2 - 72 - (220 if data.photo is not None else 0)
     lines = text_lines(data.body, regular(34), body_width, 3)
-    text_bottom = panel_top + 142 + len(lines) * 48
+    quote_lines = (
+        text_lines(data.quote_body, regular(28), body_width - 32, 2) if data.quote_author else []
+    )
+
+    quote_height = 40 + len(quote_lines) * 38 + 16 if data.quote_author else 0
+    body_top = panel_top + 142 + quote_height
+    text_bottom = body_top + len(lines) * 48
     photo_bottom = panel_top + 220 if data.photo is not None else 0
     panel_bottom = max(text_bottom, photo_bottom) + 24
 
@@ -130,7 +138,19 @@ def comment_card(data: CardData) -> bytes:
         right = CARD_WIDTH - PADDING - 32
         paste_rounded(canvas, data.photo, (right - 190, panel_top + 30, right, panel_top + 220), 26)
 
-    body_top = panel_top + 142
+    if data.quote_author:
+        # the quoted line wears the same left rail Telegram uses, so a reply reads as a reply
+        quote_top = panel_top + 142
+        quote_bottom = quote_top + 34 + len(quote_lines) * 38
+        draw.rounded_rectangle((inner, quote_top, inner + 6, quote_bottom), 3, fill=GREEN)
+        draw.text(
+            (inner + 22, quote_top - 2), data.quote_author, font=semibold(26), fill=GREEN_DEEP
+        )
+        line_top = quote_top + 36
+        for line in quote_lines:
+            draw.text((inner + 22, line_top), line, font=regular(28), fill=INK_SOFT)
+            line_top += 38
+
     for line in lines:
         draw.text((inner, body_top), line, font=regular(34), fill=INK_SOFT)
         body_top += 48
@@ -291,6 +311,7 @@ def placeholder_card(room_name: str = "") -> bytes:
 
 RENDERERS = {
     "comment": comment_card,
+    "reply": comment_card,
     "vote_request": vote_card,
     "vote_last_call": vote_card,
     "approved": verdict_card,

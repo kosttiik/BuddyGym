@@ -25,7 +25,8 @@ const commentColumns = `
 	(SELECT count(*)::int FROM checkin_comment_likes l WHERE l.comment_id = c.id),
 	EXISTS (SELECT 1 FROM checkin_comment_likes l WHERE l.comment_id = c.id AND l.user_id = $2),
 	c.reply_to,
-	COALESCE(p.first_name, ''), COALESCE(pc.body, ''), (pc.photo_key IS NOT NULL AND pc.photo_key <> '')`
+	COALESCE(p.first_name, ''), COALESCE(p.id, 0), COALESCE(pc.body, ''),
+	(pc.photo_key IS NOT NULL AND pc.photo_key <> '')`
 
 func scanComment(row pgx.Row) (domain.Comment, error) {
 	var c domain.Comment
@@ -33,7 +34,7 @@ func scanComment(row pgx.Row) (domain.Comment, error) {
 	err := row.Scan(&c.ID, &c.CheckinID, &c.UserID, &c.Body, &c.PhotoKey, &c.CreatedAt,
 		&c.Author.FirstName, &c.Author.Username, &c.Author.PhotoURL, &c.Author.AvatarKey,
 		&c.Likes, &c.LikedByMe,
-		&c.ReplyTo, &c.ReplyToAuthor, &c.ReplyToBody, &parentPhoto)
+		&c.ReplyTo, &c.ReplyToAuthor, &c.ReplyToAuthorID, &c.ReplyToBody, &parentPhoto)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Comment{}, ErrNotFound
 	}

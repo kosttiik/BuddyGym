@@ -78,18 +78,19 @@ class NotificationService:
         return await self._core.checkin_owner(str(checkin_id))
 
     async def _enrich(self, event: Event, deliveries: list[Delivery]) -> list[Delivery]:
-        users = await self._core.users([event.actor_id])
+        # each card is written in the recipient's own language, not the actor's
+        users = await self._core.users([event.actor_id, *{d.chat_id for d in deliveries}])
         actor = users.get(event.actor_id)
-        if actor is None:
-            return deliveries
-        return [
-            Delivery(
-                d.chat_id,
-                d.kind,
-                {**d.payload, "actor_name": actor.first_name, "actor_avatar_key": actor.avatar_key},
-            )
-            for d in deliveries
-        ]
+        out = []
+        for delivery in deliveries:
+            payload = dict(delivery.payload)
+            if actor is not None:
+                payload["actor_name"] = actor.first_name
+                payload["actor_avatar_key"] = actor.avatar_key
+            recipient = users.get(delivery.chat_id)
+            payload["language"] = recipient.language if recipient else "ru"
+            out.append(Delivery(delivery.chat_id, delivery.kind, payload))
+        return out
 
     async def _store(self, event: Event, deliveries: list[Delivery]) -> int:
         async with self._sessions() as session:

@@ -8,6 +8,7 @@ from src.render.cards import placeholder_card, render
 
 KINDS = [
     "comment",
+    "reply",
     "vote_last_call",
     "member_left",
     "freeze_canceled",
@@ -67,3 +68,38 @@ def test_a_long_comment_is_ellipsed_rather_than_spilled():
 
 def test_the_placeholder_is_a_card_of_its_own():
     assert Image.open(BytesIO(placeholder_card("Комната"))).width == 1080
+
+
+def test_a_card_speaks_the_recipient_language():
+    ru = card_for("member_joined", {**PAYLOAD, "language": "ru"})
+    en = card_for("member_joined", {**PAYLOAD, "language": "en"})
+
+    assert ru.title == "Новый участник"
+    assert en.title == "New member"
+    assert caption("member_joined", {**PAYLOAD, "language": "en"}).startswith("👋 New member")
+
+
+def test_freeze_dates_follow_the_reader_locale():
+    payload = {**PAYLOAD, "starts_at": "2026-07-25", "ends_at": "2026-08-05"}
+
+    assert (
+        card_for("freeze_scheduled", {**payload, "language": "ru"}).footer
+        == "с 25 июля по 5 августа"
+    )
+    assert card_for("freeze_scheduled", {**payload, "language": "en"}).footer == "Jul 25 to Aug 5"
+
+
+def test_a_reply_card_quotes_the_comment_it_answers():
+    data = card_for(
+        "reply",
+        {
+            **PAYLOAD,
+            "body": "согласен",
+            "reply_to_author": "Костя",
+            "reply_to_body": "завтра в 8 утра",
+        },
+    )
+
+    assert data.quote_author == "Костя"
+    assert data.quote_body == "завтра в 8 утра"
+    assert Image.open(BytesIO(render("reply", data))).width == 1080

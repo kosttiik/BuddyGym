@@ -18,6 +18,7 @@ type UsersRepo interface {
 	Upsert(ctx context.Context, id int64, username, firstName, photoURL string) (domain.User, error)
 	Get(ctx context.Context, id int64) (domain.User, error)
 	UpdateTheme(ctx context.Context, id int64, theme string) (domain.User, error)
+	UpdateLanguage(ctx context.Context, id int64, language string) (domain.User, error)
 	SetStatus(ctx context.Context, id int64, emoji, text string) (domain.User, error)
 	Achievements(ctx context.Context, userID int64) ([]domain.Achievement, error)
 	Stats(ctx context.Context, userID int64) (domain.Stats, error)

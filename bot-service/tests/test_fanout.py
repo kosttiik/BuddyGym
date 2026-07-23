@@ -57,3 +57,20 @@ def test_an_approval_notifies_the_author_and_carries_achievements():
 
 def test_unknown_events_are_ignored():
     assert recipients_for(event("room.renamed"), ROOM, None) == []
+
+
+def test_a_reply_goes_to_the_comment_author_not_the_photo_owner():
+    deliveries = recipients_for(
+        event("comment.created", actor=2, checkin_id="c1", reply_to_author_id=1), ROOM, 3
+    )
+
+    assert [(d.chat_id, d.kind) for d in deliveries] == [(1, "reply")]
+
+
+def test_replying_to_yourself_notifies_nobody():
+    assert (
+        recipients_for(
+            event("comment.created", actor=2, checkin_id="c1", reply_to_author_id=2), ROOM, 3
+        )
+        == []
+    )

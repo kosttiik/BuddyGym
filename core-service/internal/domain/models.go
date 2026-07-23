@@ -19,6 +19,7 @@ type User struct {
 	FirstName    string    `json:"first_name"`
 	PhotoURL     string    `json:"photo_url"`
 	Theme        string    `json:"theme"`
+	Language     string    `json:"language"`
 	Rank         string    `json:"rank"`
 	StatusEmoji  string    `json:"status_emoji"`
 	StatusText   string    `json:"status_text"`
@@ -97,8 +98,9 @@ type Comment struct {
 	CreatedAt time.Time `json:"created_at"`
 	ReplyTo   *int64    `json:"reply_to,omitempty"`
 	// the quoted line the reply answers, resolved so the client needs no second lookup
-	ReplyToAuthor string `json:"reply_to_author,omitempty"`
-	ReplyToBody   string `json:"reply_to_body,omitempty"`
+	ReplyToAuthor   string `json:"reply_to_author,omitempty"`
+	ReplyToAuthorID int64  `json:"reply_to_author_id,omitempty"`
+	ReplyToBody     string `json:"reply_to_body,omitempty"`
 }
 
 type CommentSummary struct {
