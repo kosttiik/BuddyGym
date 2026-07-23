@@ -33,10 +33,38 @@ jobs:
       - name: build
         run: go build ./cmd/core
 
-  docker:
+  bot:
     runs-on: ubuntu-latest
-    needs: core
+    defaults:
+      run:
+        working-directory: bot-service
     steps:
       - uses: actions/checkout@v7
-      - name: docker build
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: sync
+        run: uv sync --frozen
+
+      - name: lint
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
+      - name: test
+        run: uv run pytest
+
+      - name: integration test
+        run: uv run pytest -m integration
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: [core, bot]
+    steps:
+      - uses: actions/checkout@v7
+      - name: docker build core
         run: docker build -t buddygym-core ./core-service
+      - name: docker build bot
+        run: docker build -t buddygym-bot ./bot-service
