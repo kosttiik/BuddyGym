@@ -70,6 +70,14 @@ def test_the_placeholder_is_a_card_of_its_own():
     assert Image.open(BytesIO(placeholder_card("Комната"))).width == 1080
 
 
+def test_every_kind_carries_a_caption_in_both_languages():
+    """A missing entry silently falls back to a bare "BuddyGym" line under the card."""
+    for kind in KINDS:
+        for language in ("ru", "en"):
+            text = caption(kind, {**PAYLOAD, "language": language})
+            assert text != "BuddyGym", f"{kind}/{language} has no caption"
+
+
 def test_a_card_speaks_the_recipient_language():
     ru = card_for("member_joined", {**PAYLOAD, "language": "ru"})
     en = card_for("member_joined", {**PAYLOAD, "language": "en"})

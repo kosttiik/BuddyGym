@@ -51,6 +51,7 @@ def format_day(value: str, language: str) -> str:
 # string here is built from nouns instead of past-tense verbs.
 CAPTIONS = {
     "comment": "💬 Новый комментарий к вашему фото",
+    "reply": "↩️ Ответ на ваш комментарий",
     "vote_request": "🗳 Нужен ваш голос в «{room}»",
     "vote_last_call": "⏰ Голосование скоро закроется",
     "approved": "✅ Тренировка зачтена в «{room}»",
