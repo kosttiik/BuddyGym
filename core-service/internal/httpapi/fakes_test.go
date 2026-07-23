@@ -635,6 +635,22 @@ func (f *fakeCheckins) Vote(_ context.Context, checkinID string, voterID int64, 
 	return c, nil
 }
 
+func (f *fakeCheckins) Cancel(_ context.Context, checkinID string, userID int64) (checkin.Checkin, error) {
+	if f.err != nil {
+		return checkin.Checkin{}, f.err
+	}
+	c, ok := f.checkins[checkinID]
+	if !ok {
+		return checkin.Checkin{}, status.Error(codes.NotFound, "checkin not found")
+	}
+	if c.UserID != userID {
+		return checkin.Checkin{}, status.Error(codes.PermissionDenied, "only the author can cancel")
+	}
+	c.Status = "expired"
+	f.checkins[checkinID] = c
+	return c, nil
+}
+
 type fakeFreezes struct {
 	freezes map[[2]int64][]domain.Freeze
 	nextID  int64

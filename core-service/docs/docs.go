@@ -126,6 +126,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/httpapi.CreateCheckinGeoRequest"
                         }
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "replace today's checkin instead of failing with 409",
+                        "name": "replace",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -160,6 +166,12 @@ const docTemplate = `{
                         "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.DuplicateCheckinResponse"
                         }
                     },
                     "429": {
@@ -2681,6 +2693,21 @@ const docTemplate = `{
                     "maximum": 20,
                     "minimum": 1,
                     "example": 2
+                }
+            }
+        },
+        "httpapi.DuplicateCheckinResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string",
+                    "example": "already logged today"
+                },
+                "existing": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/checkin.Checkin"
+                    }
                 }
             }
         },

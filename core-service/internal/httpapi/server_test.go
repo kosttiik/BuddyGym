@@ -1278,3 +1278,36 @@ func TestEventsAreEmittedForBotNotifications(t *testing.T) {
 		}
 	}
 }
+
+// A second checkin on the same calendar day is a mistake more often than a second workout,
+// so it is refused until the client asks to replace the earlier one.
+func TestSecondCheckinOnTheSameDayNeedsAReplace(t *testing.T) {
+	e := newEnv()
+	room := e.createRoom(t, 1, domain.RoomOpen)
+	geo := httpapi.CreateCheckinGeoRequest{
+		RoomIDs: []int64{room.ID}, Geo: checkin.Geo{Lat: 55, Lon: 37, HorizontalAccuracy: 10},
+	}
+
+	rec := e.do(t, "POST", "/api/v1/checkins", geo, reqOpts{userID: 1})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("first: %d %s", rec.Code, rec.Body.String())
+	}
+	first := decode[[]checkin.Checkin](t, rec)[0]
+
+	rec = e.do(t, "POST", "/api/v1/checkins", geo, reqOpts{userID: 1})
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("second: %d %s", rec.Code, rec.Body.String())
+	}
+	dup := decode[httpapi.DuplicateCheckinResponse](t, rec)
+	if len(dup.Existing) != 1 || dup.Existing[0].ID != first.ID {
+		t.Fatalf("conflict must name today's checkin: %+v", dup)
+	}
+
+	rec = e.do(t, "POST", "/api/v1/checkins?replace=true", geo, reqOpts{userID: 1})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("replace: %d %s", rec.Code, rec.Body.String())
+	}
+	if got := e.checkins.checkins[first.ID].Status; got != "expired" {
+		t.Errorf("replaced checkin status = %q, want expired", got)
+	}
+}
