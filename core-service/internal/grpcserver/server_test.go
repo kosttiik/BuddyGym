@@ -393,7 +393,12 @@ func TestApplyCheckinResultEmitsEventOnce(t *testing.T) {
 	if got := e.events.types(); !slices.Equal(got, []string{"checkin.approved"}) {
 		t.Fatalf("events = %v, want one checkin.approved", got)
 	}
-	if ev := e.events.events[0]; ev.RoomID != 3 || ev.ActorID != 8 || ev.Subject["checkin_id"] != "c-ev" {
+	ev := e.events.events[0]
+	if ev.RoomID != 3 || ev.ActorID != 8 || ev.Subject["checkin_id"] != "c-ev" {
 		t.Errorf("event = %+v", ev)
+	}
+	// the bot draws a progress bar from these, so an approval must carry them
+	if ev.Subject["done"] != 1 {
+		t.Errorf("done = %v, want 1", ev.Subject["done"])
 	}
 }

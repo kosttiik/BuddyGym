@@ -204,7 +204,7 @@ def freeze_card(data: CardData) -> bytes:
     brand_header(draw, PADDING, PADDING, "BuddyGym", data.room_name)
     _headline(draw, data)
 
-    box_top = CARD_HEIGHT - PADDING - 200
+    box_top = 300
     draw.rounded_rectangle(
         (PADDING, box_top, CARD_WIDTH - PADDING, box_top + 140), RADIUS, fill=WHITE
     )

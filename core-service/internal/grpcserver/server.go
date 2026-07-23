@@ -105,17 +105,24 @@ func (s *Server) ApplyCheckinResult(ctx context.Context, req *pbv1.ApplyCheckinR
 			s.log.Error("credit buddies", "err", err, "checkin_id", req.GetCheckinId())
 		}
 	}
-	if applied {
-		s.emit(ctx, "checkin."+result, req.GetRoomId(), req.GetUserId(), map[string]any{
-			"checkin_id": req.GetCheckinId(),
-			"granted":    granted,
-		})
-	}
-
 	count, err := s.results.PeriodCount(ctx, req.GetRoomId(), req.GetUserId())
 	if err != nil {
 		s.log.Error("period count", "err", err)
 		return nil, status.Error(codes.Internal, "apply failed")
+	}
+
+	if applied {
+		// the bot draws a progress bar on the verdict card, so the goal travels with the event
+		goal := 0
+		if room, err := s.rooms.Get(ctx, req.GetRoomId()); err == nil {
+			goal = room.GoalPerPeriod
+		}
+		s.emit(ctx, "checkin."+result, req.GetRoomId(), req.GetUserId(), map[string]any{
+			"checkin_id": req.GetCheckinId(),
+			"granted":    granted,
+			"done":       count,
+			"goal":       goal,
+		})
 	}
 	return &pbv1.ApplyCheckinResultResponse{
 		WorkoutsCount:       int32(count),
