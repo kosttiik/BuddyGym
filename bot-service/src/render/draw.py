@@ -1,3 +1,4 @@
+from functools import lru_cache
 from io import BytesIO
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
@@ -5,6 +6,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 from src.render.theme import (
     CARD_HEIGHT,
     CARD_WIDTH,
+    FONT_DIR,
     GREEN,
     GREEN_DEEP,
     INK,
@@ -172,6 +174,58 @@ def logo(draw: ImageDraw.ImageDraw, x: int, y: int, size: int = 56) -> None:
             radius * scale,
             fill=WHITE,
         )
+
+
+EMOJI_STRIKE = 109
+
+
+@lru_cache(maxsize=64)
+def emoji_image(char: str, size: int) -> Image.Image | None:
+    """Color emoji as an image.
+
+    The bundled text font has no emoji glyphs, and NotoColorEmoji is a bitmap font with one
+    fixed strike, so it is drawn at that size and scaled down.
+    """
+    path = FONT_DIR / "NotoColorEmoji.ttf"
+    if not path.exists():
+        return None
+    try:
+        font = ImageFont.truetype(str(path), EMOJI_STRIKE)
+    except OSError:
+        return None
+    canvas = Image.new("RGBA", (EMOJI_STRIKE + 40, EMOJI_STRIKE + 40), (0, 0, 0, 0))
+    ImageDraw.Draw(canvas).text((10, 10), char, font=font, embedded_color=True)
+    box = canvas.getbbox()
+    if box is None:
+        return None
+    return canvas.crop(box).resize((size, size), Image.Resampling.LANCZOS)
+
+
+def draw_text_with_emoji(
+    canvas: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    xy: tuple[int, int],
+    text: str,
+    font: ImageFont.FreeTypeFont,
+    fill,
+) -> int:
+    """Draws a line where a leading emoji is painted as an image. Returns the end x."""
+    x, y = xy
+    parts = text.split(" ", 1)
+    lead = parts[0]
+    if lead and max(map(ord, lead)) > 0x2000:
+        size = round(font.size * 1.1)
+        image = emoji_image(lead, size)
+        if image is not None:
+            canvas.paste(image, (x, y - 2), image)
+            x += size + 10
+            text = parts[1] if len(parts) > 1 else ""
+        else:
+            text = parts[1] if len(parts) > 1 else ""
+    if text:
+        draw.text((x, y), text, font=font, fill=fill)
+        x += round(font.getlength(text))
+    return x
 
 
 def star(draw: ImageDraw.ImageDraw, cx: int, cy: int, radius: int, fill) -> None:

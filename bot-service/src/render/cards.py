@@ -6,6 +6,7 @@ from src.render.draw import (
     brand_header,
     card_background,
     circle_avatar,
+    draw_text_with_emoji,
     paste_rounded,
     progress_bar,
     rounded_mask,
@@ -204,7 +205,9 @@ def verdict_card(data: CardData) -> bytes:
     )
     bottom = bar_top + 32
     if data.footer:
-        draw.text((PADDING, bar_top + 52), data.footer, font=semibold(28), fill=INK_SOFT)
+        draw_text_with_emoji(
+            canvas, draw, (PADDING, bar_top + 52), data.footer, semibold(28), INK_SOFT
+        )
         bottom = bar_top + 96
     return _finish(canvas, bottom)
 
@@ -217,7 +220,7 @@ def progress_card(data: CardData) -> bytes:
 
     row_top = y + 36
     for name, done, goal in data.lines[:3]:
-        draw.text((PADDING, row_top), name, font=semibold(32), fill=INK)
+        draw_text_with_emoji(canvas, draw, (PADDING, row_top), name, semibold(32), INK)
         draw.text(
             (CARD_WIDTH - PADDING, row_top),
             f"{done}/{goal}",

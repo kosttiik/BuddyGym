@@ -179,6 +179,13 @@ def caption(kind: str, payload: dict[str, Any]) -> str:
     )
 
 
+def _sport(payload: dict[str, Any]) -> str:
+    """The member's own discipline, shown only when they picked one."""
+    emoji = payload.get("sport_emoji", "")
+    name = payload.get("sport_name", "")
+    return f"{emoji} {name}".strip() if (emoji or name) else ""
+
+
 def _lines(payload: dict[str, Any]) -> list[tuple[str, int, int]]:
     return [tuple(line) for line in payload.get("lines", [])]
 
@@ -219,6 +226,7 @@ def card_for(kind: str, payload: dict[str, Any]) -> CardData:
                 accent=GREEN_DEEP,
                 done=int(payload.get("done", 0)),
                 goal=int(payload.get("goal", 0)),
+                footer=_sport(payload),
             )
         case "rejected":
             return CardData(
@@ -228,6 +236,7 @@ def card_for(kind: str, payload: dict[str, Any]) -> CardData:
                 accent=RED,
                 done=int(payload.get("done", 0)),
                 goal=int(payload.get("goal", 0)),
+                footer=_sport(payload),
             )
         case "member_joined":
             return CardData(title=title, room_name=room, actor_name=actor, footer=second)

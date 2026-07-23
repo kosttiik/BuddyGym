@@ -49,12 +49,21 @@ class UserContext:
 
 
 @dataclass(frozen=True, slots=True)
+class MemberSettings:
+    goal: int
+    sport_name: str
+    sport_emoji: str
+
+
+@dataclass(frozen=True, slots=True)
 class MemberProgress:
     user_id: int
     room_name: str
     first_name: str
     workouts_count: int
     goal: int
+    sport_name: str
+    sport_emoji: str
     period_ends_at: datetime
     frozen: bool
 
@@ -155,6 +164,22 @@ class CoreReader:
             row = (await conn.execute(query, {"id": checkin_id})).first()
         return int(row.actor_id) if row else None
 
+    async def member(self, room_id: int, user_id: int) -> MemberSettings | None:
+        """The member's own goal and sport, falling back to the room defaults."""
+        query = text(
+            """
+            SELECT COALESCE(m.goal_per_period, r.goal_per_period) AS goal,
+                   m.sport_name, m.sport_emoji
+            FROM memberships m JOIN rooms r ON r.id = m.room_id
+            WHERE m.room_id = :room_id AND m.user_id = :user_id
+            """
+        )
+        async with self._engine.connect() as conn:
+            row = (await conn.execute(query, {"room_id": room_id, "user_id": user_id})).first()
+        if row is None:
+            return None
+        return MemberSettings(int(row.goal), row.sport_name or "", row.sport_emoji or "")
+
     async def members_behind_goal(self, hours_before: int) -> list[MemberProgress]:
         """Members whose period closes within the window and who have not met their goal yet.
 
@@ -165,6 +190,7 @@ class CoreReader:
             WITH grid AS (
                 SELECT m.room_id, r.name AS room_name, m.user_id, u.first_name,
                        COALESCE(m.goal_per_period, r.goal_per_period) AS goal,
+                       m.sport_name, m.sport_emoji,
                        ((m.joined_at AT TIME ZONE 'UTC')::date + (floor(
                            (((now() AT TIME ZONE 'UTC')::date
                              - (m.joined_at AT TIME ZONE 'UTC')::date))::numeric / r.period_days
@@ -207,6 +233,8 @@ class CoreReader:
                     first_name=row.first_name,
                     workouts_count=row.workouts_count,
                     goal=row.goal,
+                    sport_name=row.sport_name or "",
+                    sport_emoji=row.sport_emoji or "",
                     period_ends_at=row.period_ends_at,
                     frozen=row.frozen,
                 )

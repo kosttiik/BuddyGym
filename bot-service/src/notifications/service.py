@@ -89,6 +89,13 @@ class NotificationService:
                 payload["actor_avatar_key"] = actor.avatar_key
             recipient = users.get(delivery.chat_id)
             payload["language"] = recipient.language if recipient else "ru"
+            # a verdict card draws the recipient's own goal and sport, not the room defaults
+            if delivery.kind in {"approved", "rejected", "buddy_credited"}:
+                member = await self._core.member(event.room_id, delivery.chat_id)
+                if member is not None:
+                    payload["goal"] = member.goal
+                    payload["sport_name"] = member.sport_name
+                    payload["sport_emoji"] = member.sport_emoji
             out.append(Delivery(delivery.chat_id, delivery.kind, payload))
         return out
 
@@ -233,7 +240,10 @@ class NotificationService:
 
         per_user: dict[int, list[list]] = defaultdict(list)
         for row in behind:
-            per_user[row.user_id].append([row.room_name, row.workouts_count, row.goal])
+            label = (
+                f"{row.sport_emoji} {row.room_name}".strip() if row.sport_emoji else row.room_name
+            )
+            per_user[row.user_id].append([label, row.workouts_count, row.goal])
 
         async with self._sessions() as session:
             for user_id, lines in per_user.items():
