@@ -215,15 +215,28 @@ class NotificationService:
                 .values(**values)
             )
             if result.status == DeliveryStatus.UNREACHABLE:
-                await session.merge(
-                    Recipient(user_id=chat_id, reachable=False, updated_at=self._now())
+                await session.execute(
+                    insert(Recipient)
+                    .values(user_id=chat_id, reachable=False, updated_at=self._now())
+                    .on_conflict_do_update(
+                        index_elements=[Recipient.user_id],
+                        set_={"reachable": False, "updated_at": self._now()},
+                    )
                 )
             await session.commit()
 
     async def mark_reachable(self, user_id: int) -> None:
         """A /start (or a granted write access) reopens the chat; pending cards go out next tick."""
         async with self._sessions() as session:
-            await session.merge(Recipient(user_id=user_id, reachable=True, updated_at=self._now()))
+            # several updates from one chat can land at once, so this has to be an upsert
+            await session.execute(
+                insert(Recipient)
+                .values(user_id=user_id, reachable=True, updated_at=self._now())
+                .on_conflict_do_update(
+                    index_elements=[Recipient.user_id],
+                    set_={"reachable": True, "updated_at": self._now()},
+                )
+            )
             await session.execute(
                 update(Notification)
                 .where(Notification.chat_id == user_id)

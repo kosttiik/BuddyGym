@@ -209,6 +209,7 @@ class CoreReader:
                 WHERE r.deleted_at IS NULL
             )
             SELECT g.room_id, g.room_name, g.user_id, g.first_name, g.goal,
+                   g.sport_name, g.sport_emoji,
                    (g.period_start + g.period_days)::timestamptz AS period_ends_at,
                    g.frozen,
                    (
