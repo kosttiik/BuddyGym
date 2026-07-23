@@ -138,7 +138,8 @@ services:
     environment: &bot_env
       BOT_TOKEN: ${BOT_NOTIFY_TOKEN:-}
       BOT_USERNAME: ${VITE_BOT_USERNAME:-buddygym_bot}
-      MINI_APP_SHORT_NAME: ${VITE_MINIAPP_NAME:-app}
+      # empty is a valid value: the bot then links to t.me/<bot>?startapp=
+      MINI_APP_SHORT_NAME: ${VITE_MINIAPP_NAME-}
       BOT_MODE: ${BOT_MODE:-dry-run}
       BOT_DB_DSN: postgres://${POSTGRES_USER:-buddygym}:${POSTGRES_PASSWORD:-buddygym}@postgres:5432/bot_db?sslmode=disable
       CORE_DB_DSN: postgres://${POSTGRES_USER:-buddygym}:${POSTGRES_PASSWORD:-buddygym}@postgres:5432/core_db?sslmode=disable
