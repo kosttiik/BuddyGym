@@ -94,6 +94,8 @@ class Sender:
 
             if avatar_key := item.payload.get("actor_avatar_key"):
                 data.actor_photo = load(await self._photos.avatar(avatar_key))
+            if room_key := item.payload.get("room_avatar_key"):
+                data.room_photo = load(await self._photos.avatar(room_key))
             if item.kind == "comment" and item.payload.get("comment_photo_key"):
                 data.photo = load(
                     await self._photos.comment_photo(item.payload["comment_photo_key"])

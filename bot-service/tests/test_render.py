@@ -8,6 +8,12 @@ from src.render.cards import placeholder_card, render
 
 KINDS = [
     "comment",
+    "vote_last_call",
+    "member_left",
+    "freeze_canceled",
+    "streak_at_risk",
+    "period_summary",
+    "welcome",
     "vote_request",
     "approved",
     "rejected",
@@ -40,7 +46,9 @@ def test_every_card_renders_a_valid_png(kind: str):
     image = Image.open(BytesIO(png))
 
     assert image.format == "PNG"
-    assert image.size == (1080, 720)
+    # cards crop to their content, so only the width is fixed
+    assert image.width == 1080
+    assert 420 <= image.height <= 720
 
 
 @pytest.mark.parametrize("kind", KINDS)
@@ -54,8 +62,8 @@ def test_every_card_has_a_caption_without_placeholders(kind: str):
 def test_a_long_comment_is_ellipsed_rather_than_spilled():
     png = render("comment", card_for("comment", {**PAYLOAD, "body": "очень длинный текст " * 40}))
 
-    assert Image.open(BytesIO(png)).size == (1080, 720)
+    assert Image.open(BytesIO(png)).width == 1080
 
 
 def test_the_placeholder_is_a_card_of_its_own():
-    assert Image.open(BytesIO(placeholder_card("Комната"))).size == (1080, 720)
+    assert Image.open(BytesIO(placeholder_card("Комната"))).width == 1080

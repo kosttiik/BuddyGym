@@ -32,6 +32,7 @@ class Event:
 class RoomContext:
     room_id: int
     room_name: str
+    avatar_key: str
     goal_per_period: int
     period_days: int
     votes_required: int
@@ -97,7 +98,8 @@ class CoreReader:
     async def room(self, room_id: int) -> RoomContext | None:
         query = text(
             """
-            SELECT r.id, r.name, r.goal_per_period, r.period_days, r.votes_required,
+            SELECT r.id, r.name, COALESCE(r.avatar_key, '') AS avatar_key,
+                   r.goal_per_period, r.period_days, r.votes_required,
                    COALESCE(array_agg(m.user_id ORDER BY m.joined_at)
                             FILTER (WHERE m.user_id IS NOT NULL), '{}') AS member_ids
             FROM rooms r
@@ -113,6 +115,7 @@ class CoreReader:
         return RoomContext(
             room_id=row.id,
             room_name=row.name,
+            avatar_key=row.avatar_key,
             goal_per_period=row.goal_per_period,
             period_days=row.period_days,
             votes_required=row.votes_required,

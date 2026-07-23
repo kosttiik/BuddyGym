@@ -21,6 +21,7 @@ def recipients_for(event: Event, room: RoomContext, checkin_owner: int | None) -
     base = {
         "room_id": room.room_id,
         "room_name": room.room_name,
+        "room_avatar_key": room.avatar_key,
         "actor_id": event.actor_id,
         **event.subject,
     }
@@ -51,6 +52,12 @@ def recipients_for(event: Event, room: RoomContext, checkin_owner: int | None) -
 
         case "freeze.scheduled":
             return [Delivery(uid, "freeze_scheduled", base) for uid in others]
+
+        case "freeze.canceled":
+            return [Delivery(uid, "freeze_canceled", base) for uid in others]
+
+        case "member.left":
+            return [Delivery(uid, "member_left", base) for uid in others]
 
         case _:
             return []

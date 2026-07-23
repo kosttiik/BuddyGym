@@ -12,6 +12,7 @@ from src.render.theme import (
     SURFACE_DIM,
     WHITE,
 )
+from src.render.theme import font as _font
 
 
 def vertical_gradient(
@@ -79,12 +80,13 @@ def circle_avatar(photo: Image.Image | None, size: int, seed: str, initial: str)
     out = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(out)
     draw.ellipse((0, 0, size - 1, size - 1), fill=color)
-    letter = (initial or "?")[:1].upper()
-    fnt = ImageFont.truetype(
-        str(__import__("src.render.theme", fromlist=["FONT_DIR"]).FONT_DIR / "Onest-Bold.ttf"),
-        round(size * 0.44),
+    draw.text(
+        (size / 2, size / 2),
+        (initial or "?")[:1].upper(),
+        font=_font("Bold", round(size * 0.44)),
+        fill=WHITE,
+        anchor="mm",
     )
-    draw.text((size / 2, size / 2), letter, font=fnt, fill=WHITE, anchor="mm")
     return out
 
 
@@ -150,26 +152,26 @@ def text_lines(text: str, fnt: ImageFont.FreeTypeFont, max_width: int, max_lines
 
 
 def logo(draw: ImageDraw.ImageDraw, x: int, y: int, size: int = 56) -> None:
-    """The dumbbell mark, drawn rather than embedded so it scales with the card."""
-    draw.rounded_rectangle((x, y, x + size, y + size), size // 3, fill=GREEN_DEEP)
-    bar_y = y + size / 2
-    plate_h = size * 0.42
-    small_h = size * 0.24
-    draw.rounded_rectangle(
-        (x + size * 0.2, bar_y - plate_h / 2, x + size * 0.3, bar_y + plate_h / 2),
-        size * 0.05,
-        fill=WHITE,
-    )
-    draw.rounded_rectangle(
-        (x + size * 0.7, bar_y - plate_h / 2, x + size * 0.8, bar_y + plate_h / 2),
-        size * 0.05,
-        fill=WHITE,
-    )
-    draw.rounded_rectangle(
-        (x + size * 0.34, bar_y - small_h / 2, x + size * 0.66, bar_y + small_h / 2),
-        size * 0.04,
-        fill=WHITE,
-    )
+    """The app's own dumbbell mark, traced from IconDumbbell on a 24x24 grid."""
+    draw.rounded_rectangle((x, y, x + size, y + size), size * 0.3, fill=GREEN_DEEP)
+
+    # the icon is inset inside the tile the way the app draws it
+    scale = size * 0.62 / 24
+    ox = x + size / 2 - 12 * scale
+    oy = y + size / 2 - 12 * scale
+    bars = [
+        (1.5, 9, 3.2, 6, 1.3),
+        (5.3, 7, 3.2, 10, 1.3),
+        (15.5, 7, 3.2, 10, 1.3),
+        (19.3, 9, 3.2, 6, 1.3),
+        (9, 10.6, 6, 2.8, 1.2),
+    ]
+    for bx, by, bw, bh, radius in bars:
+        draw.rounded_rectangle(
+            (ox + bx * scale, oy + by * scale, ox + (bx + bw) * scale, oy + (by + bh) * scale),
+            radius * scale,
+            fill=WHITE,
+        )
 
 
 def star(draw: ImageDraw.ImageDraw, cx: int, cy: int, radius: int, fill) -> None:
@@ -184,12 +186,56 @@ def star(draw: ImageDraw.ImageDraw, cx: int, cy: int, radius: int, fill) -> None
     draw.polygon(points, fill=fill)
 
 
-def brand_header(draw: ImageDraw.ImageDraw, x: int, y: int, title: str, subtitle: str) -> None:
-    from src.render.theme import INK_SOFT, bold, semibold
+def square_avatar(photo: Image.Image | None, size: int, seed: str, initial: str) -> Image.Image:
+    """A room picture as the rounded square the app uses, or its lettered fallback."""
+    out = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    radius = round(size * 0.32)
+    if photo is not None:
+        square = min(photo.width, photo.height)
+        left = (photo.width - square) // 2
+        top = (photo.height - square) // 2
+        cropped = photo.crop((left, top, left + square, top + square)).resize(
+            (size, size), Image.Resampling.LANCZOS
+        )
+        out.paste(cropped.convert("RGB"), (0, 0), rounded_mask((size, size), radius))
+        return out
 
-    logo(draw, x, y)
-    draw.text((x + 76, y + 4), title, font=bold(34), fill=INK)
-    draw.text((x + 76, y + 46), subtitle, font=semibold(24), fill=INK_SOFT)
+    palette = [(228, 106, 118), (86, 132, 235), (166, 176, 184), (238, 155, 84), (124, 92, 214)]
+    color = palette[sum(map(ord, seed or "?")) % len(palette)]
+    draw = ImageDraw.Draw(out)
+    draw.rounded_rectangle((0, 0, size - 1, size - 1), radius, fill=color)
+    draw.text(
+        (size / 2, size / 2),
+        (initial or "?")[:1].upper(),
+        font=_font("Bold", round(size * 0.44)),
+        fill=WHITE,
+        anchor="mm",
+    )
+    return out
+
+
+def brand_header(
+    canvas: Image.Image,
+    draw: ImageDraw.ImageDraw,
+    x: int,
+    y: int,
+    room_name: str,
+    room_photo: Image.Image | None = None,
+) -> None:
+    """The room wears its own picture; the brand mark sits opposite so both stay readable."""
+    from src.render.theme import CARD_WIDTH, INK_SOFT, bold, semibold
+
+    if room_name:
+        avatar = square_avatar(room_photo, 64, room_name, room_name)
+        canvas.paste(avatar, (x, y), avatar)
+        draw.text((x + 84, y + 6), room_name, font=bold(32), fill=INK)
+        draw.text((x + 84, y + 44), "BuddyGym", font=semibold(22), fill=INK_SOFT)
+    else:
+        logo(draw, x, y, 64)
+        draw.text((x + 84, y + 16), "BuddyGym", font=bold(32), fill=INK)
+        return
+
+    logo(draw, CARD_WIDTH - x - 44, y + 10, 44)
 
 
 def to_png(image: Image.Image) -> bytes:

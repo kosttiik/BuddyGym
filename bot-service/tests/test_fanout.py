@@ -6,6 +6,7 @@ from src.notifications.fanout import recipients_for
 ROOM = RoomContext(
     room_id=7,
     room_name="Железные братья",
+    avatar_key="",
     goal_per_period=3,
     period_days=7,
     votes_required=2,
