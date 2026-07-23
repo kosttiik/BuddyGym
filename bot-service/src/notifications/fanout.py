@@ -28,7 +28,11 @@ def recipients_for(event: Event, room: RoomContext, checkin_owner: int | None) -
 
     match event.type:
         case "comment.created":
-            # the photo owner first, then everyone else who commented is out of scope here
+            # a reply belongs to the comment author, everything else to the photo owner
+            if parent_author := event.subject.get("reply_to_author_id"):
+                if int(parent_author) != event.actor_id:
+                    return [Delivery(int(parent_author), "reply", base)]
+                return []
             target = checkin_owner if checkin_owner and checkin_owner != event.actor_id else None
             return [Delivery(target, "comment", base)] if target else []
 

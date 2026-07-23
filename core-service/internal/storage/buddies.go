@@ -69,7 +69,8 @@ func (b *Buddies) ForCheckins(ctx context.Context, checkinIDs []string) (map[str
 		var checkinID string
 		var u domain.User
 		if err := rows.Scan(&checkinID, &u.ID, &u.Username, &u.FirstName, &u.PhotoURL, &u.Theme,
-			&u.Rank, &u.StatusEmoji, &u.StatusText, &u.CreatedAt, &u.AvatarKey, &u.AvatarSource); err != nil {
+			&u.Language, &u.Rank, &u.StatusEmoji, &u.StatusText, &u.CreatedAt,
+			&u.AvatarKey, &u.AvatarSource); err != nil {
 			return nil, err
 		}
 		u.HasAvatar = u.AvatarKey != ""

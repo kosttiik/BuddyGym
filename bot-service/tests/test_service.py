@@ -19,11 +19,13 @@ NOW = datetime(2026, 7, 22, 12, 0, tzinfo=UTC)
 CORE_SCHEMA = """
 CREATE TABLE users (
     id BIGINT PRIMARY KEY, username TEXT NOT NULL DEFAULT '',
-    first_name TEXT NOT NULL DEFAULT '', avatar_key TEXT NOT NULL DEFAULT ''
+    first_name TEXT NOT NULL DEFAULT '', avatar_key TEXT NOT NULL DEFAULT '',
+    language TEXT NOT NULL DEFAULT 'ru'
 );
 CREATE TABLE rooms (
     id BIGINT PRIMARY KEY, name TEXT NOT NULL, goal_per_period INT NOT NULL,
-    period_days INT NOT NULL, votes_required INT NOT NULL, deleted_at TIMESTAMPTZ
+    period_days INT NOT NULL, votes_required INT NOT NULL, deleted_at TIMESTAMPTZ,
+    avatar_key TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE memberships (
     room_id BIGINT NOT NULL, user_id BIGINT NOT NULL, goal_per_period INT,
@@ -43,7 +45,8 @@ CREATE TABLE events (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 INSERT INTO users (id, first_name) VALUES (1, 'Костя'), (2, 'Марина'), (3, 'Дима');
-INSERT INTO rooms VALUES (7, 'Железные братья', 3, 7, 2, NULL);
+INSERT INTO rooms (id, name, goal_per_period, period_days, votes_required)
+    VALUES (7, 'Железные братья', 3, 7, 2);
 INSERT INTO memberships (room_id, user_id) VALUES (7, 1), (7, 2), (7, 3);
 """
 

@@ -19,11 +19,11 @@ func NewUsers(pool *pgxpool.Pool) *Users {
 	return &Users{pool: pool}
 }
 
-const userColumns = "id, username, first_name, photo_url, theme, rank, status_emoji, status_text, created_at, avatar_key, avatar_source"
+const userColumns = "id, username, first_name, photo_url, theme, language, rank, status_emoji, status_text, created_at, avatar_key, avatar_source"
 
 func scanUser(row pgx.Row) (domain.User, error) {
 	var u domain.User
-	err := row.Scan(&u.ID, &u.Username, &u.FirstName, &u.PhotoURL, &u.Theme, &u.Rank,
+	err := row.Scan(&u.ID, &u.Username, &u.FirstName, &u.PhotoURL, &u.Theme, &u.Language, &u.Rank,
 		&u.StatusEmoji, &u.StatusText, &u.CreatedAt, &u.AvatarKey, &u.AvatarSource)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.User{}, ErrNotFound
@@ -50,6 +50,11 @@ func (r *Users) Get(ctx context.Context, id int64) (domain.User, error) {
 func (r *Users) UpdateTheme(ctx context.Context, id int64, theme string) (domain.User, error) {
 	return scanUser(r.pool.QueryRow(ctx,
 		"UPDATE users SET theme = $2 WHERE id = $1 RETURNING "+userColumns, id, theme))
+}
+
+func (r *Users) UpdateLanguage(ctx context.Context, id int64, language string) (domain.User, error) {
+	return scanUser(r.pool.QueryRow(ctx,
+		"UPDATE users SET language = $2 WHERE id = $1 RETURNING "+userColumns, id, language))
 }
 
 func (r *Users) PendingAvatars(ctx context.Context) ([]domain.User, error) {

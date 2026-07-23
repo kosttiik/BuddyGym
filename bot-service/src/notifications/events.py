@@ -45,6 +45,7 @@ class UserContext:
     first_name: str
     username: str
     avatar_key: str
+    language: str = "ru"
 
 
 @dataclass(frozen=True, slots=True)
@@ -127,7 +128,7 @@ class CoreReader:
             return {}
         query = text(
             """
-            SELECT id, first_name, username, avatar_key
+            SELECT id, first_name, username, avatar_key, language
             FROM users WHERE id = ANY(:ids)
             """
         )
@@ -139,6 +140,7 @@ class CoreReader:
                     first_name=row.first_name,
                     username=row.username,
                     avatar_key=row.avatar_key or "",
+                    language=row.language or "ru",
                 )
                 for row in rows
             }

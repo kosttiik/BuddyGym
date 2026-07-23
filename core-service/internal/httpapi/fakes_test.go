@@ -118,6 +118,17 @@ func (f *fakeUsers) UpdateTheme(_ context.Context, id int64, theme string) (doma
 	return u, nil
 }
 
+
+func (f *fakeUsers) UpdateLanguage(_ context.Context, id int64, language string) (domain.User, error) {
+	u, ok := f.users[id]
+	if !ok {
+		return domain.User{}, storage.ErrNotFound
+	}
+	u.Language = language
+	f.users[id] = u
+	return u, nil
+}
+
 func (f *fakeUsers) Achievements(_ context.Context, userID int64) ([]domain.Achievement, error) {
 	return f.achs[userID], nil
 }
@@ -229,6 +240,7 @@ func (f *fakeComments) Add(_ context.Context, checkinID string, roomID, userID i
 		for _, parent := range f.byCheckin[checkinID] {
 			if parent.ID == *replyTo {
 				c.ReplyToAuthor = parent.Author.FirstName
+				c.ReplyToAuthorID = parent.UserID
 				c.ReplyToBody = parent.Body
 			}
 		}

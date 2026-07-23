@@ -1,7 +1,51 @@
+from datetime import date
 from typing import Any
 
 from src.render.cards import CardData
 from src.render.theme import AMBER, GREEN_DEEP, INK_SOFT, PURPLE, RED
+
+MONTHS = {
+    # genitive: the date always reads as "25 июля", never "25 июль"
+    "ru": (
+        "января",
+        "февраля",
+        "марта",
+        "апреля",
+        "мая",
+        "июня",
+        "июля",
+        "августа",
+        "сентября",
+        "октября",
+        "ноября",
+        "декабря",
+    ),
+    "en": (
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+    ),
+}
+
+
+def format_day(value: str, language: str) -> str:
+    """A date the way the member reads it: 25 июля for ru, Jul 25 for en."""
+    try:
+        parsed = date.fromisoformat(str(value)[:10])
+    except ValueError:
+        return str(value)
+    month = MONTHS.get(language, MONTHS["ru"])[parsed.month - 1]
+    return f"{parsed.day} {month}" if language == "ru" else f"{month} {parsed.day}"
+
 
 # Russian verbs carry gender, and a name alone does not tell us which one to use, so every
 # string here is built from nouns instead of past-tense verbs.
@@ -40,12 +84,94 @@ ACHIEVEMENTS = {
 }
 
 
+TITLES = {
+    "ru": {
+        "comment": ("Новый комментарий", "под вашей тренировкой"),
+        "reply": ("Ответ на ваш комментарий", ""),
+        "vote_request": ("Нужен ваш голос", "Тренировка ждёт подтверждения"),
+        "vote_last_call": ("Голосование закрывается", "Осталось меньше трёх часов"),
+        "approved": ("Тренировка зачтена", "ЗАЧТЕНО"),
+        "rejected": ("Тренировка отклонена", "ОТКЛОНЕНО"),
+        "buddy_credited": ("Совместная тренировка зачтена", "ЗАЧТЕНО"),
+        "member_joined": ("Новый участник", "теперь тренируется с вами"),
+        "member_left": ("Участник вышел", "покинул комнату"),
+        "freeze_scheduled": ("Заморозка", ""),
+        "freeze_canceled": ("Заморозка снята", "снова в деле"),
+        "reminder": ("Период заканчивается", "Ещё есть время отметить тренировку"),
+        "streak_at_risk": ("Серия под угрозой", "Одна тренировка спасёт серию"),
+        "period_summary": ("Период закрыт", ""),
+        "digest": ("Что произошло", "Собрали в одну сводку"),
+        "welcome": ("BuddyGym на связи", "Буду присылать только важное"),
+    },
+    "en": {
+        "comment": ("New comment", "under your workout"),
+        "reply": ("Reply to your comment", ""),
+        "vote_request": ("Your vote is needed", "A workout is waiting for approval"),
+        "vote_last_call": ("Voting closes soon", "Less than three hours left"),
+        "approved": ("Workout approved", "APPROVED"),
+        "rejected": ("Workout rejected", "REJECTED"),
+        "buddy_credited": ("Joint workout approved", "APPROVED"),
+        "member_joined": ("New member", "now trains with you"),
+        "member_left": ("Member left", "left the room"),
+        "freeze_scheduled": ("Freeze", ""),
+        "freeze_canceled": ("Freeze lifted", "back in the game"),
+        "reminder": ("The period is ending", "There is still time to log a workout"),
+        "streak_at_risk": ("Streak at risk", "One workout saves the streak"),
+        "period_summary": ("Period closed", ""),
+        "digest": ("What happened", "Folded into one summary"),
+        "welcome": ("BuddyGym is here", "Only what matters"),
+    },
+}
+
+CAPTIONS_EN = {
+    "comment": "💬 New comment on your photo",
+    "reply": "↩️ Reply to your comment",
+    "vote_request": "🗳 Your vote is needed in \u00ab{room}\u00bb",
+    "vote_last_call": "⏰ Voting closes soon",
+    "approved": "✅ Workout approved in \u00ab{room}\u00bb",
+    "rejected": "❌ Workout rejected in \u00ab{room}\u00bb",
+    "buddy_credited": "🤝 Joint workout approved in \u00ab{room}\u00bb",
+    "member_joined": "👋 New member in \u00ab{room}\u00bb",
+    "member_left": "🚪 A member left \u00ab{room}\u00bb",
+    "freeze_scheduled": "❄️ Freeze in \u00ab{room}\u00bb",
+    "freeze_canceled": "🔥 Freeze lifted in \u00ab{room}\u00bb",
+    "achievement": "🏅 New achievement: {achievement}",
+    "reminder": "⏳ The period is ending",
+    "streak_at_risk": "🔥 Streak at risk",
+    "period_summary": "📊 Period summary",
+    "digest": "📬 BuddyGym summary",
+    "welcome": "👋 BuddyGym is here",
+}
+
+WELCOME_LINES = {
+    "ru": (
+        "Комментарии и ответы",
+        "Голосования и зачёты",
+        "Достижения",
+        "Напоминание перед концом периода",
+    ),
+    "en": (
+        "Comments and replies",
+        "Votes and verdicts",
+        "Achievements",
+        "A nudge before the period ends",
+    ),
+}
+
+
+def titles(kind: str, language: str) -> tuple[str, str]:
+    table = TITLES.get(language, TITLES["ru"])
+    return table.get(kind, (kind, ""))
+
+
 def achievement_title(key: str) -> tuple[str, str]:
     return ACHIEVEMENTS.get(key, (key, "Новое достижение"))
 
 
 def caption(kind: str, payload: dict[str, Any]) -> str:
-    template = CAPTIONS.get(kind, "BuddyGym")
+    language = payload.get("language", "ru")
+    source = CAPTIONS_EN if language == "en" else CAPTIONS
+    template = source.get(kind, "BuddyGym")
     return template.format(
         actor=payload.get("actor_name", "Участник"),
         room=payload.get("room_name", "комнате"),
@@ -58,139 +184,85 @@ def _lines(payload: dict[str, Any]) -> list[tuple[str, int, int]]:
 
 
 def card_for(kind: str, payload: dict[str, Any]) -> CardData:
+    language = payload.get("language", "ru")
     room = payload.get("room_name", "")
     actor = payload.get("actor_name", "")
+    title, second = titles(kind, language)
 
     match kind:
-        case "comment":
+        case "comment" | "reply":
             return CardData(
-                title="Новый комментарий",
-                subtitle="под вашей тренировкой",
+                title=title,
+                subtitle=second,
                 room_name=room,
                 actor_name=actor,
                 body=payload.get("body", ""),
+                quote_author=payload.get("reply_to_author", ""),
+                quote_body=payload.get("reply_to_body", ""),
             )
-        case "vote_request":
+        case "vote_request" | "vote_last_call":
             return CardData(
-                title="Нужен ваш голос",
-                subtitle="Тренировка ждёт подтверждения",
+                title=title,
+                subtitle=second,
                 room_name=room,
                 actor_name=actor,
+                accent=AMBER if kind == "vote_last_call" else GREEN_DEEP,
                 votes_have=int(payload.get("votes_approve", 0)),
                 votes_need=int(payload.get("votes_required", 1)),
-                footer="Голосов на зачёт",
+                footer="Голосов на зачёт" if language == "ru" else "Votes to approve",
             )
-        case "vote_last_call":
+        case "approved" | "buddy_credited":
             return CardData(
-                title="Голосование закрывается",
-                subtitle=payload.get("subtitle", "Осталось меньше трёх часов"),
-                room_name=room,
-                actor_name=actor,
-                accent=AMBER,
-                votes_have=int(payload.get("votes_approve", 0)),
-                votes_need=int(payload.get("votes_required", 1)),
-                footer="Голосов на зачёт",
-            )
-        case "approved":
-            return CardData(
-                title="Тренировка зачтена",
-                badge="ЗАЧТЕНО",
+                title=title,
+                badge=second,
                 room_name=room,
                 accent=GREEN_DEEP,
                 done=int(payload.get("done", 0)),
                 goal=int(payload.get("goal", 0)),
-                footer=payload.get("footer", ""),
             )
         case "rejected":
             return CardData(
-                title="Тренировка отклонена",
-                badge="ОТКЛОНЕНО",
+                title=title,
+                badge=second,
                 room_name=room,
                 accent=RED,
                 done=int(payload.get("done", 0)),
                 goal=int(payload.get("goal", 0)),
             )
-        case "buddy_credited":
-            return CardData(
-                title="Совместная тренировка зачтена",
-                badge="ЗАЧТЕНО",
-                room_name=room,
-                accent=GREEN_DEEP,
-                done=int(payload.get("done", 0)),
-                goal=int(payload.get("goal", 0)),
-            )
         case "member_joined":
-            return CardData(
-                title="Новый участник",
-                room_name=room,
-                actor_name=actor,
-                footer="теперь тренируется с вами",
-            )
+            return CardData(title=title, room_name=room, actor_name=actor, footer=second)
         case "member_left":
             return CardData(
-                title="Участник вышел",
-                room_name=room,
-                actor_name=actor,
-                accent=INK_SOFT,
-                footer="покинул комнату",
+                title=title, room_name=room, actor_name=actor, accent=INK_SOFT, footer=second
             )
         case "freeze_scheduled":
+            starts = format_day(payload.get("starts_at", ""), language)
+            ends = format_day(payload.get("ends_at", ""), language)
+            span = f"с {starts} по {ends}" if language == "ru" else f"{starts} to {ends}"
             return CardData(
-                title="Заморозка",
-                room_name=room,
-                actor_name=actor,
-                accent=PURPLE,
-                footer=f"с {payload.get('starts_at', '')} по {payload.get('ends_at', '')}",
+                title=title, room_name=room, actor_name=actor, accent=PURPLE, footer=span
             )
         case "freeze_canceled":
             return CardData(
-                title="Заморозка снята",
-                room_name=room,
-                actor_name=actor,
-                accent=GREEN_DEEP,
-                footer="снова в деле",
+                title=title, room_name=room, actor_name=actor, accent=GREEN_DEEP, footer=second
             )
         case "achievement":
-            title, subtitle = achievement_title(payload.get("key", ""))
-            return CardData(title=title, subtitle=subtitle, room_name=room, accent=GREEN_DEEP)
-        case "reminder":
+            name, subtitle = achievement_title(payload.get("key", ""))
+            return CardData(title=name, subtitle=subtitle, room_name=room, accent=GREEN_DEEP)
+        case "reminder" | "streak_at_risk" | "period_summary":
             return CardData(
-                title="Период заканчивается",
+                title=title,
                 subtitle=payload.get("subtitle", ""),
+                accent=AMBER if kind == "streak_at_risk" else GREEN_DEEP,
                 lines=_lines(payload),
-                footer="Ещё есть время отметить тренировку",
-            )
-        case "streak_at_risk":
-            return CardData(
-                title="Серия под угрозой",
-                subtitle=payload.get("subtitle", ""),
-                accent=AMBER,
-                lines=_lines(payload),
-                footer="Одна тренировка спасёт серию",
-            )
-        case "period_summary":
-            return CardData(
-                title="Период закрыт",
-                subtitle=payload.get("subtitle", ""),
-                lines=_lines(payload),
-                footer=payload.get("footer", ""),
+                footer=payload.get("footer", second),
             )
         case "digest":
             return CardData(
-                title="Что произошло",
-                subtitle=payload.get("subtitle", "Собрали в одну сводку"),
-                lines=_lines(payload),
+                title=title, subtitle=payload.get("subtitle", second), lines=_lines(payload)
             )
         case "welcome":
-            return CardData(
-                title="BuddyGym на связи",
-                subtitle="Буду присылать только важное",
-                lines=[
-                    ("Комментарии к вашим фото", 0, 0),
-                    ("Голосования и зачёты", 0, 0),
-                    ("Достижения", 0, 0),
-                    ("Напоминание перед концом периода", 0, 0),
-                ],
-            )
+            lines = WELCOME_LINES.get(language, WELCOME_LINES["ru"])
+            return CardData(title=title, subtitle=second, lines=[(line, 0, 0) for line in lines])
         case _:
             return CardData(title="BuddyGym", room_name=room)
