@@ -29,6 +29,7 @@ CREATE TABLE rooms (
 );
 CREATE TABLE memberships (
     room_id BIGINT NOT NULL, user_id BIGINT NOT NULL, goal_per_period INT,
+    sport_name TEXT NOT NULL DEFAULT '', sport_emoji TEXT NOT NULL DEFAULT '',
     joined_at TIMESTAMPTZ NOT NULL DEFAULT now(), PRIMARY KEY (room_id, user_id)
 );
 CREATE TABLE freezes (
