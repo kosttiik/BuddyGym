@@ -29,6 +29,8 @@ type CheckinServiceClient interface {
 	// core calls this when the room's votes_required changes: pending checkins get the new
 	// quorum and are re-finalized against the votes they already hold
 	SyncRoomVotesRequired(ctx context.Context, in *SyncRoomVotesRequiredRequest, opts ...grpc.CallOption) (*SyncRoomVotesRequiredResponse, error)
+	// the author drops their own pending checkin, e.g. to replace a wrong photo the same day
+	CancelCheckin(ctx context.Context, in *CancelCheckinRequest, opts ...grpc.CallOption) (*CancelCheckinResponse, error)
 }
 
 type checkinServiceClient struct {
@@ -125,6 +127,15 @@ func (c *checkinServiceClient) SyncRoomVotesRequired(ctx context.Context, in *Sy
 	return out, nil
 }
 
+func (c *checkinServiceClient) CancelCheckin(ctx context.Context, in *CancelCheckinRequest, opts ...grpc.CallOption) (*CancelCheckinResponse, error) {
+	out := new(CancelCheckinResponse)
+	err := c.cc.Invoke(ctx, "/buddygym.v1.CheckinService/CancelCheckin", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CheckinServiceServer is the server API for CheckinService service.
 // All implementations must embed UnimplementedCheckinServiceServer
 // for forward compatibility
@@ -140,6 +151,8 @@ type CheckinServiceServer interface {
 	// core calls this when the room's votes_required changes: pending checkins get the new
 	// quorum and are re-finalized against the votes they already hold
 	SyncRoomVotesRequired(context.Context, *SyncRoomVotesRequiredRequest) (*SyncRoomVotesRequiredResponse, error)
+	// the author drops their own pending checkin, e.g. to replace a wrong photo the same day
+	CancelCheckin(context.Context, *CancelCheckinRequest) (*CancelCheckinResponse, error)
 	mustEmbedUnimplementedCheckinServiceServer()
 }
 
@@ -167,6 +180,9 @@ func (UnimplementedCheckinServiceServer) PurgeRoom(context.Context, *PurgeRoomRe
 }
 func (UnimplementedCheckinServiceServer) SyncRoomVotesRequired(context.Context, *SyncRoomVotesRequiredRequest) (*SyncRoomVotesRequiredResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SyncRoomVotesRequired not implemented")
+}
+func (UnimplementedCheckinServiceServer) CancelCheckin(context.Context, *CancelCheckinRequest) (*CancelCheckinResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CancelCheckin not implemented")
 }
 func (UnimplementedCheckinServiceServer) mustEmbedUnimplementedCheckinServiceServer() {}
 
@@ -310,6 +326,24 @@ func _CheckinService_SyncRoomVotesRequired_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CheckinService_CancelCheckin_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CancelCheckinRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CheckinServiceServer).CancelCheckin(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/buddygym.v1.CheckinService/CancelCheckin",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CheckinServiceServer).CancelCheckin(ctx, req.(*CancelCheckinRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CheckinService_ServiceDesc is the grpc.ServiceDesc for CheckinService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -340,6 +374,10 @@ var CheckinService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SyncRoomVotesRequired",
 			Handler:    _CheckinService_SyncRoomVotesRequired_Handler,
+		},
+		{
+			MethodName: "CancelCheckin",
+			Handler:    _CheckinService_CancelCheckin_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

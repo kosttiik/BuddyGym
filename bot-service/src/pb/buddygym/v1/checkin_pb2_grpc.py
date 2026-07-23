@@ -71,6 +71,11 @@ class CheckinServiceStub:
                 request_serializer=buddygym_dot_v1_dot_checkin__pb2.SyncRoomVotesRequiredRequest.SerializeToString,
                 response_deserializer=buddygym_dot_v1_dot_checkin__pb2.SyncRoomVotesRequiredResponse.FromString,
                 _registered_method=True)
+        self.CancelCheckin = channel.unary_unary(
+                '/buddygym.v1.CheckinService/CancelCheckin',
+                request_serializer=buddygym_dot_v1_dot_checkin__pb2.CancelCheckinRequest.SerializeToString,
+                response_deserializer=buddygym_dot_v1_dot_checkin__pb2.CancelCheckinResponse.FromString,
+                _registered_method=True)
 
 
 class CheckinServiceServicer:
@@ -124,6 +129,13 @@ class CheckinServiceServicer:
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def CancelCheckin(self, request, context):
+        """the author drops their own pending checkin, e.g. to replace a wrong photo the same day
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_CheckinServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -161,6 +173,11 @@ def add_CheckinServiceServicer_to_server(servicer, server):
                     servicer.SyncRoomVotesRequired,
                     request_deserializer=buddygym_dot_v1_dot_checkin__pb2.SyncRoomVotesRequiredRequest.FromString,
                     response_serializer=buddygym_dot_v1_dot_checkin__pb2.SyncRoomVotesRequiredResponse.SerializeToString,
+            ),
+            'CancelCheckin': grpc.unary_unary_rpc_method_handler(
+                    servicer.CancelCheckin,
+                    request_deserializer=buddygym_dot_v1_dot_checkin__pb2.CancelCheckinRequest.FromString,
+                    response_serializer=buddygym_dot_v1_dot_checkin__pb2.CancelCheckinResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -354,6 +371,33 @@ class CheckinService:
             '/buddygym.v1.CheckinService/SyncRoomVotesRequired',
             buddygym_dot_v1_dot_checkin__pb2.SyncRoomVotesRequiredRequest.SerializeToString,
             buddygym_dot_v1_dot_checkin__pb2.SyncRoomVotesRequiredResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def CancelCheckin(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/buddygym.v1.CheckinService/CancelCheckin',
+            buddygym_dot_v1_dot_checkin__pb2.CancelCheckinRequest.SerializeToString,
+            buddygym_dot_v1_dot_checkin__pb2.CancelCheckinResponse.FromString,
             options,
             channel_credentials,
             insecure,

@@ -332,6 +332,16 @@ definitions:
         minimum: 1
         type: integer
     type: object
+  httpapi.DuplicateCheckinResponse:
+    properties:
+      error:
+        example: already logged today
+        type: string
+      existing:
+        items:
+          $ref: '#/definitions/checkin.Checkin'
+        type: array
+    type: object
   httpapi.ErrorResponse:
     properties:
       error:
@@ -544,6 +554,10 @@ paths:
         name: body
         schema:
           $ref: '#/definitions/httpapi.CreateCheckinGeoRequest'
+      - description: replace today's checkin instead of failing with 409
+        in: query
+        name: replace
+        type: boolean
       produces:
       - application/json
       responses:
@@ -569,6 +583,10 @@ paths:
           description: Not Found
           schema:
             $ref: '#/definitions/httpapi.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/httpapi.DuplicateCheckinResponse'
         "429":
           description: Too Many Requests
           schema:

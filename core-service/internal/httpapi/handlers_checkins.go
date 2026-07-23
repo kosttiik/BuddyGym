@@ -2,11 +2,13 @@ package httpapi
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	pbv1 "github.com/kosttiik/BuddyGym/core-service/internal/pb/buddygym/v1"
 
@@ -68,6 +70,8 @@ type VoteRequest struct {
 // @Failure		401			{object}	ErrorResponse
 // @Failure		403			{object}	ErrorResponse
 // @Failure		404			{object}	ErrorResponse
+// @Param			replace		query		bool					false	"replace today's checkin instead of failing with 409"
+// @Failure		409			{object}	DuplicateCheckinResponse
 // @Failure		429			{object}	ErrorResponse
 // @Failure		502			{object}	ErrorResponse
 // @Router			/checkins [post]
@@ -81,6 +85,8 @@ func (s *Server) handleCreateCheckin(w http.ResponseWriter, r *http.Request) {
 	var geo *checkin.Geo
 	var roomIDs []int64
 	var buddyIDs []int64
+	// set by the client after the user confirmed replacing today's checkin
+	replace := r.URL.Query().Get("replace") == "true"
 
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
 		r.Body = http.MaxBytesReader(w, r.Body, maxPhotoSize+1<<20)
@@ -133,6 +139,27 @@ func (s *Server) handleCreateCheckin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	existing, err := s.todaysCheckins(r.Context(), user.ID, targets)
+	if err != nil {
+		s.mapError(w, err)
+		return
+	}
+	if len(existing) > 0 {
+		if !replace {
+			writeJSON(w, http.StatusConflict, DuplicateCheckinResponse{
+				Error:    "already logged today",
+				Existing: existing,
+			})
+			return
+		}
+		for _, old := range existing {
+			if _, err := s.checkins.Cancel(r.Context(), old.ID, user.ID); err != nil {
+				s.mapError(w, err)
+				return
+			}
+		}
+	}
+
 	created, err := s.checkins.Create(r.Context(), user.ID, targets, photo, geo)
 	if err != nil {
 		s.mapError(w, err)
@@ -157,6 +184,43 @@ func (s *Server) handleCreateCheckin(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	writeJSON(w, http.StatusCreated, s.enrichBuddies(r, created))
+}
+
+// DuplicateCheckinResponse carries what the client needs to offer a replacement.
+type DuplicateCheckinResponse struct {
+	Error    string            `json:"error" example:"already logged today"`
+	Existing []checkin.Checkin `json:"existing"`
+}
+
+// todaysCheckins finds the user's live checkins made on the same calendar day in the target
+// rooms. The day boundary is the date, not 24 hours: an evening and a next-morning workout
+// are two different days.
+func (s *Server) todaysCheckins(ctx context.Context, userID int64, targets []checkin.Target) ([]checkin.Checkin, error) {
+	today := s.now().UTC().Format(time.DateOnly)
+	seen := map[string]struct{}{}
+	var out []checkin.Checkin
+	for _, target := range targets {
+		for _, status := range []pbv1.CheckinStatus{
+			pbv1.CheckinStatus_CHECKIN_STATUS_PENDING,
+			pbv1.CheckinStatus_CHECKIN_STATUS_APPROVED,
+		} {
+			list, err := s.checkins.List(ctx, target.RoomID, status, 100, 0)
+			if err != nil {
+				return nil, err
+			}
+			for _, c := range list {
+				if c.UserID != userID || c.CreatedAt.UTC().Format(time.DateOnly) != today {
+					continue
+				}
+				if _, dup := seen[c.ID]; dup {
+					continue
+				}
+				seen[c.ID] = struct{}{}
+				out = append(out, c)
+			}
+		}
+	}
+	return out, nil
 }
 
 func (s *Server) resolveTargets(w http.ResponseWriter, r *http.Request, roomIDs []int64) ([]checkin.Target, bool) {

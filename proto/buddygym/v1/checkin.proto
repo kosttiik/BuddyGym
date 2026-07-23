@@ -20,6 +20,8 @@ service CheckinService {
   // core calls this when the room's votes_required changes: pending checkins get the new
   // quorum and are re-finalized against the votes they already hold
   rpc SyncRoomVotesRequired(SyncRoomVotesRequiredRequest) returns (SyncRoomVotesRequiredResponse);
+  // the author drops their own pending checkin, e.g. to replace a wrong photo the same day
+  rpc CancelCheckin(CancelCheckinRequest) returns (CancelCheckinResponse);
 }
 
 enum CheckinStatus {
@@ -115,6 +117,16 @@ message CastVoteRequest {
 }
 
 message CastVoteResponse {
+  Checkin checkin = 1;
+}
+
+message CancelCheckinRequest {
+  string checkin_id = 1;
+  // only the author may cancel, and only while the checkin is still pending
+  int64 user_id = 2;
+}
+
+message CancelCheckinResponse {
   Checkin checkin = 1;
 }
 

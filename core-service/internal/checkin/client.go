@@ -199,6 +199,16 @@ func (c *Client) Vote(ctx context.Context, checkinID string, voterID int64, appr
 	return fromPB(resp.GetCheckin()), nil
 }
 
+func (c *Client) Cancel(ctx context.Context, checkinID string, userID int64) (Checkin, error) {
+	resp, err := c.api.CancelCheckin(ctx, &pbv1.CancelCheckinRequest{
+		CheckinId: checkinID, UserId: userID,
+	})
+	if err != nil {
+		return Checkin{}, err
+	}
+	return fromPB(resp.GetCheckin()), nil
+}
+
 func (c *Client) PurgeRoom(ctx context.Context, roomID int64) error {
 	_, err := c.api.PurgeRoom(ctx, &pbv1.PurgeRoomRequest{RoomId: roomID})
 	return err
