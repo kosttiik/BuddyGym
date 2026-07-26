@@ -13,7 +13,10 @@ type CreateRoomRequest struct {
 	Kind          string `json:"kind" example:"open" enums:"open,invite"`
 	GoalPerPeriod int    `json:"goal_per_period" example:"3" minimum:"1" maximum:"100"`
 	PeriodDays    int    `json:"period_days" example:"7" minimum:"1" maximum:"90"`
-	VotesRequired int    `json:"votes_required" example:"2" minimum:"1" maximum:"20"`
+	// CalendarWeek runs the period from Monday to Sunday in each member's timezone and
+	// pins period_days to 7; without it the period is a rolling window from the join date.
+	CalendarWeek  bool `json:"calendar_week" example:"true"`
+	VotesRequired int  `json:"votes_required" example:"2" minimum:"1" maximum:"20"`
 }
 
 type UpdateRoomRequest = CreateRoomRequest
@@ -48,6 +51,9 @@ type RoomDetailResponse struct {
 
 func (req *CreateRoomRequest) validate() string {
 	req.Name = strings.TrimSpace(req.Name)
+	if req.CalendarWeek {
+		req.PeriodDays = 7
+	}
 	switch {
 	case req.Name == "" || len(req.Name) > 64:
 		return "name must be 1..64 chars"
@@ -130,6 +136,7 @@ func (s *Server) handleCreateRoom(w http.ResponseWriter, r *http.Request) {
 		Kind:          req.Kind,
 		GoalPerPeriod: req.GoalPerPeriod,
 		PeriodDays:    req.PeriodDays,
+		CalendarWeek:  req.CalendarWeek,
 		VotesRequired: req.VotesRequired,
 		CreatorID:     userFrom(r.Context()).ID,
 	})
@@ -181,6 +188,7 @@ func (s *Server) handleUpdateRoom(w http.ResponseWriter, r *http.Request) {
 	votesChanged := room.VotesRequired != req.VotesRequired
 	room.Name, room.Kind = req.Name, req.Kind
 	room.GoalPerPeriod, room.PeriodDays, room.VotesRequired = req.GoalPerPeriod, req.PeriodDays, req.VotesRequired
+	room.CalendarWeek = req.CalendarWeek
 	updated, err := s.rooms.Update(r.Context(), room)
 	if err != nil {
 		s.mapError(w, err)
@@ -289,12 +297,16 @@ func (s *Server) handleListRooms(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, err)
 		return
 	}
-	byRoom := make(map[int64]int, len(streaks))
+	byRoom := make(map[int64]domain.StreakInput, len(streaks))
 	for _, in := range streaks {
-		byRoom[in.RoomID] = in.Streak(s.now())
+		byRoom[in.RoomID] = in
 	}
+	now := s.now()
 	for i := range rooms {
-		rooms[i].Streak = byRoom[rooms[i].ID]
+		in := byRoom[rooms[i].ID]
+		rooms[i].Streak = in.Streak(now)
+		rooms[i].WorkoutsCount = in.CurrentCount(now)
+		rooms[i].PeriodEndsAt = in.PeriodEndsAt(now)
 	}
 	writeJSON(w, http.StatusOK, rooms)
 }
@@ -374,6 +386,8 @@ func (s *Server) handleGetRoom(w http.ResponseWriter, r *http.Request) {
 	for i := range members {
 		in := byUser[members[i].ID]
 		members[i].Streak = in.Streak(now)
+		members[i].WorkoutsCount = in.CurrentCount(now)
+		members[i].PeriodEndsAt = in.PeriodEndsAt(now)
 		members[i].HasClosedPeriod, members[i].LastClosedPeriodFailed = in.Judgment(now)
 		members[i].Freeze = domain.CurrentFreeze(in.Freezes, now)
 		if until := domain.FreezeCooldownUntil(in.Freezes, now); !until.IsZero() {

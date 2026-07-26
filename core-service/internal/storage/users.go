@@ -19,12 +19,13 @@ func NewUsers(pool *pgxpool.Pool) *Users {
 	return &Users{pool: pool}
 }
 
-const userColumns = "id, username, first_name, photo_url, theme, language, rank, status_emoji, status_text, created_at, avatar_key, avatar_source"
+const userColumns = "id, username, first_name, photo_url, theme, language, timezone, rank, status_emoji, status_text, created_at, avatar_key, avatar_source"
 
 func scanUser(row pgx.Row) (domain.User, error) {
 	var u domain.User
-	err := row.Scan(&u.ID, &u.Username, &u.FirstName, &u.PhotoURL, &u.Theme, &u.Language, &u.Rank,
-		&u.StatusEmoji, &u.StatusText, &u.CreatedAt, &u.AvatarKey, &u.AvatarSource)
+	err := row.Scan(&u.ID, &u.Username, &u.FirstName, &u.PhotoURL, &u.Theme, &u.Language,
+		&u.Timezone, &u.Rank, &u.StatusEmoji, &u.StatusText, &u.CreatedAt, &u.AvatarKey,
+		&u.AvatarSource)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.User{}, ErrNotFound
 	}
@@ -55,6 +56,11 @@ func (r *Users) UpdateTheme(ctx context.Context, id int64, theme string) (domain
 func (r *Users) UpdateLanguage(ctx context.Context, id int64, language string) (domain.User, error) {
 	return scanUser(r.pool.QueryRow(ctx,
 		"UPDATE users SET language = $2 WHERE id = $1 RETURNING "+userColumns, id, language))
+}
+
+func (r *Users) UpdateTimezone(ctx context.Context, id int64, timezone string) (domain.User, error) {
+	return scanUser(r.pool.QueryRow(ctx,
+		"UPDATE users SET timezone = $2 WHERE id = $1 RETURNING "+userColumns, id, timezone))
 }
 
 func (r *Users) PendingAvatars(ctx context.Context) ([]domain.User, error) {
@@ -129,22 +135,27 @@ func prefixed(alias, columns string) string {
 
 func (r *Users) Stats(ctx context.Context, userID int64) (domain.Stats, error) {
 	var s domain.Stats
+	// early bird and night owl are about the clock on the wall, so both read the user's zone
 	err := r.pool.QueryRow(ctx, `
 		SELECT
 			(SELECT count(*)::int FROM checkin_results
-			  WHERE user_id = $1 AND status = 'approved'),
+			  WHERE user_id = u.id AND status = 'approved'),
 			(SELECT count(*)::int FROM memberships m
 			  JOIN rooms rm ON rm.id = m.room_id
-			  WHERE m.user_id = $1 AND rm.deleted_at IS NULL),
-			(SELECT count(DISTINCT user_id)::int FROM checkin_buddies WHERE author_id = $1),
-			(SELECT count(*)::int FROM checkin_comments WHERE user_id = $1),
+			  WHERE m.user_id = u.id AND rm.deleted_at IS NULL),
+			(SELECT count(DISTINCT user_id)::int FROM checkin_buddies WHERE author_id = u.id),
+			(SELECT count(*)::int FROM checkin_comments WHERE user_id = u.id),
 			(SELECT count(*)::int FROM checkin_results
-			  WHERE user_id = $1 AND status = 'approved'
-			    AND extract(hour FROM checkin_created_at AT TIME ZONE 'UTC') < 8),
+			  WHERE user_id = u.id AND status = 'approved'
+			    AND extract(hour FROM checkin_created_at AT TIME ZONE u.timezone) < 8),
 			(SELECT count(*)::int FROM checkin_results
-			  WHERE user_id = $1 AND status = 'approved'
-			    AND extract(hour FROM checkin_created_at AT TIME ZONE 'UTC') >= 22)`,
+			  WHERE user_id = u.id AND status = 'approved'
+			    AND extract(hour FROM checkin_created_at AT TIME ZONE u.timezone) >= 22)
+		FROM users u WHERE u.id = $1`,
 		userID).Scan(&s.TotalWorkouts, &s.Rooms, &s.Buddies, &s.Comments,
 		&s.EarlyWorkouts, &s.LateWorkouts)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.Stats{}, nil
+	}
 	return s, err
 }

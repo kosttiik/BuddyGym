@@ -2431,6 +2431,10 @@ const docTemplate = `{
                 "theme": {
                     "type": "string"
                 },
+                "timezone": {
+                    "type": "string",
+                    "example": "Europe/Moscow"
+                },
                 "username": {
                     "type": "string"
                 },
@@ -2442,6 +2446,9 @@ const docTemplate = `{
         "domain.Room": {
             "type": "object",
             "properties": {
+                "calendar_week": {
+                    "type": "boolean"
+                },
                 "created_at": {
                     "type": "string"
                 },
@@ -2494,6 +2501,9 @@ const docTemplate = `{
         "domain.RoomWithProgress": {
             "type": "object",
             "properties": {
+                "calendar_week": {
+                    "type": "boolean"
+                },
                 "created_at": {
                     "type": "string"
                 },
@@ -2600,6 +2610,10 @@ const docTemplate = `{
                 "theme": {
                     "type": "string"
                 },
+                "timezone": {
+                    "type": "string",
+                    "example": "Europe/Moscow"
+                },
                 "username": {
                     "type": "string"
                 }
@@ -2673,6 +2687,11 @@ const docTemplate = `{
         "httpapi.CreateRoomRequest": {
             "type": "object",
             "properties": {
+                "calendar_week": {
+                    "description": "CalendarWeek runs the period from Monday to Sunday in each member's timezone and\npins period_days to 7; without it the period is a rolling window from the join date.",
+                    "type": "boolean",
+                    "example": true
+                },
                 "goal_per_period": {
                     "type": "integer",
                     "maximum": 100,
@@ -2832,6 +2851,11 @@ const docTemplate = `{
                         "neon"
                     ],
                     "example": "dark"
+                },
+                "timezone": {
+                    "description": "Timezone is an IANA name; periods close at this zone's midnight.",
+                    "type": "string",
+                    "example": "Europe/Moscow"
                 }
             }
         },
@@ -2857,6 +2881,11 @@ const docTemplate = `{
         "httpapi.UpdateRoomRequest": {
             "type": "object",
             "properties": {
+                "calendar_week": {
+                    "description": "CalendarWeek runs the period from Monday to Sunday in each member's timezone and\npins period_days to 7; without it the period is a rolling window from the join date.",
+                    "type": "boolean",
+                    "example": true
+                },
                 "goal_per_period": {
                     "type": "integer",
                     "maximum": 100,

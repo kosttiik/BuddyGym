@@ -52,6 +52,8 @@ class Settings(BaseSettings):
     # events older than this are folded into one digest instead of a burst of messages
     digest_after_hours: int = Field(default=24, validation_alias="DIGEST_AFTER_HOURS", ge=1)
     reminder_hours_before: int = Field(default=24, validation_alias="REMINDER_HOURS_BEFORE", ge=1)
+    # the hour of the member's own day the reminder goes out, so the scheduler ticks hourly
+    reminder_local_hour: int = Field(default=9, validation_alias="REMINDER_LOCAL_HOUR", ge=0, le=23)
 
     @property
     def bot_sqlalchemy_dsn(self) -> str:

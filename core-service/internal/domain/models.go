@@ -20,6 +20,7 @@ type User struct {
 	PhotoURL     string    `json:"photo_url"`
 	Theme        string    `json:"theme"`
 	Language     string    `json:"language"`
+	Timezone     string    `json:"timezone" example:"Europe/Moscow"`
 	Rank         string    `json:"rank"`
 	StatusEmoji  string    `json:"status_emoji"`
 	StatusText   string    `json:"status_text"`
@@ -41,6 +42,7 @@ type Room struct {
 	InviteCode    string    `json:"invite_code,omitempty"`
 	GoalPerPeriod int       `json:"goal_per_period"`
 	PeriodDays    int       `json:"period_days"`
+	CalendarWeek  bool      `json:"calendar_week"`
 	VotesRequired int       `json:"votes_required"`
 	CreatorID     int64     `json:"creator_id"`
 	CreatedAt     time.Time `json:"created_at"`

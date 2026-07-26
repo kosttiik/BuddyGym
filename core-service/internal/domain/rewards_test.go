@@ -148,10 +148,61 @@ func TestRoomStreak(t *testing.T) {
 			day("2026-07-10"), 2, 7, 4},
 	}
 	for _, tt := range tests {
-		got := RoomStreak(tt.days, joined, tt.goal, tt.periodDays, tt.now)
+		got := input(tt.days, joined, tt.goal, tt.periodDays).Streak(tt.now)
 		if got != tt.want {
-			t.Errorf("%s: RoomStreak = %d, want %d", tt.name, got, tt.want)
+			t.Errorf("%s: Streak = %d, want %d", tt.name, got, tt.want)
 		}
+	}
+}
+
+func input(days []time.Time, joined time.Time, goal, periodDays int, freezes ...Freeze) StreakInput {
+	return StreakInput{
+		Goal: goal, PeriodDays: periodDays, JoinedAt: joined, Days: days, Freezes: freezes,
+	}
+}
+
+// A calendar-week room anchors on Monday for everyone instead of on each join date, and
+// it does so at the member's own midnight.
+func TestCalendarWeekGrid(t *testing.T) {
+	// 2026-07-21 is a Tuesday, so the week runs Mon 2026-07-20 .. Sun 2026-07-26
+	joined := day("2026-07-21")
+	in := StreakInput{
+		Goal: 3, PeriodDays: 7, CalendarWeek: true, Timezone: "Europe/Moscow", JoinedAt: joined,
+		Days: []time.Time{day("2026-07-21"), day("2026-07-23")},
+	}
+
+	// Sunday 23:00 Moscow is already Monday in UTC: the period must not have rolled over
+	sunday := time.Date(2026, 7, 26, 23, 0, 0, 0, Location("Europe/Moscow"))
+	if got := in.CurrentCount(sunday); got != 2 {
+		t.Errorf("Sunday night count = %d, want 2 (still the same week in Moscow)", got)
+	}
+	wantEnd := time.Date(2026, 7, 27, 0, 0, 0, 0, Location("Europe/Moscow"))
+	if got := in.PeriodEndsAt(sunday); !got.Equal(wantEnd) {
+		t.Errorf("period ends at %v, want %v", got, wantEnd)
+	}
+
+	monday := time.Date(2026, 7, 27, 9, 0, 0, 0, Location("Europe/Moscow"))
+	if got := in.CurrentCount(monday); got != 0 {
+		t.Errorf("Monday count = %d, want 0 (a fresh week)", got)
+	}
+	// the week the member joined was already half over, so it is not judged
+	if has, _ := in.Judgment(monday); has {
+		t.Error("the joining week must not be judged: the member was not there for all of it")
+	}
+	if got := in.Streak(monday); got != 2 {
+		t.Errorf("streak = %d, want 2 (the partial week still carries its workouts)", got)
+	}
+}
+
+func TestCalendarWeekJudgesAFullWeek(t *testing.T) {
+	// Monday join: no partial week, so the first closed week is judged
+	in := StreakInput{
+		Goal: 3, PeriodDays: 7, CalendarWeek: true, Timezone: "UTC", JoinedAt: day("2026-07-20"),
+		Days: []time.Time{day("2026-07-21")},
+	}
+	has, failed := in.Judgment(day("2026-07-28"))
+	if !has || !failed {
+		t.Errorf("Judgment = %v %v, want judged and failed", has, failed)
 	}
 }
 

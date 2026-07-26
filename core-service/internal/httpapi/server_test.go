@@ -322,6 +322,42 @@ func TestPatchMe(t *testing.T) {
 	}
 }
 
+func TestPatchMeTimezone(t *testing.T) {
+	e := newEnv()
+
+	rec := e.do(t, "PATCH", "/api/v1/me",
+		httpapi.UpdateMeRequest{Timezone: ptr("Asia/Tokyo")}, reqOpts{})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("patch: %d %s", rec.Code, rec.Body.String())
+	}
+	if u := decode[domain.User](t, rec); u.Timezone != "Asia/Tokyo" {
+		t.Errorf("timezone = %q", u.Timezone)
+	}
+
+	rec = e.do(t, "PATCH", "/api/v1/me",
+		httpapi.UpdateMeRequest{Timezone: ptr("Mars/Olympus")}, reqOpts{})
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("unknown timezone: %d", rec.Code)
+	}
+}
+
+// A calendar-week room is always seven days long, whatever the client sends alongside it.
+func TestCalendarWeekRoomPinsPeriodToSevenDays(t *testing.T) {
+	e := newEnv()
+
+	rec := e.do(t, "POST", "/api/v1/rooms", httpapi.CreateRoomRequest{
+		Name: "week", Kind: domain.RoomOpen, GoalPerPeriod: 3, PeriodDays: 30,
+		CalendarWeek: true, VotesRequired: 2,
+	}, reqOpts{userID: 1})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", rec.Code, rec.Body.String())
+	}
+	room := decode[domain.Room](t, rec)
+	if !room.CalendarWeek || room.PeriodDays != 7 {
+		t.Errorf("room = %+v, want a 7 day calendar week", room)
+	}
+}
+
 func TestPatchMeStatus(t *testing.T) {
 	e := newEnv()
 
