@@ -20,12 +20,12 @@ CORE_SCHEMA = """
 CREATE TABLE users (
     id BIGINT PRIMARY KEY, username TEXT NOT NULL DEFAULT '',
     first_name TEXT NOT NULL DEFAULT '', avatar_key TEXT NOT NULL DEFAULT '',
-    language TEXT NOT NULL DEFAULT 'ru'
+    language TEXT NOT NULL DEFAULT 'ru', timezone TEXT NOT NULL DEFAULT 'UTC'
 );
 CREATE TABLE rooms (
     id BIGINT PRIMARY KEY, name TEXT NOT NULL, goal_per_period INT NOT NULL,
     period_days INT NOT NULL, votes_required INT NOT NULL, deleted_at TIMESTAMPTZ,
-    avatar_key TEXT NOT NULL DEFAULT ''
+    avatar_key TEXT NOT NULL DEFAULT '', calendar_week BOOLEAN NOT NULL DEFAULT false
 );
 CREATE TABLE memberships (
     room_id BIGINT NOT NULL, user_id BIGINT NOT NULL, goal_per_period INT,
@@ -85,7 +85,9 @@ async def env(postgres):
     )
     sender = RecordingSender()
     sessions = async_sessionmaker(engine, expire_on_commit=False)
-    service = NotificationService(CoreReader(engine), sessions, sender, settings, now=lambda: NOW)
+    # the reminder query only picks members whose own clock reads this hour
+    reader = CoreReader(engine, reminder_hour=datetime.now(UTC).hour)
+    service = NotificationService(reader, sessions, sender, settings, now=lambda: NOW)
     yield service, sender, engine, sessions
     await engine.dispose()
 
@@ -178,6 +180,34 @@ async def test_a_member_behind_the_goal_gets_a_reminder_unless_frozen(env):
         )
 
     assert await service.queue_reminders() == 2
+
+
+async def test_the_reminder_waits_for_the_members_own_morning(env):
+    """The scheduler ticks every hour; a member is picked up only when their local clock
+    reads the reminder hour, so nobody is woken at 3am for living in the wrong zone."""
+    service, _, engine, _ = env
+    async with engine.begin() as conn:
+        await conn.execute(
+            text("UPDATE memberships SET joined_at = now() - interval '6 days' WHERE room_id = 7")
+        )
+        # eight hours ahead of the zone the reader is tuned to
+        await conn.execute(text("UPDATE users SET timezone = 'Asia/Shanghai' WHERE id = 1"))
+
+    assert await service.queue_reminders() == 2
+
+
+async def test_a_calendar_week_room_reminds_before_sunday_midnight(env):
+    service, _, engine, _ = env
+    async with engine.begin() as conn:
+        await conn.execute(text("UPDATE rooms SET calendar_week = true WHERE id = 7"))
+        await conn.execute(
+            text("UPDATE memberships SET joined_at = now() - interval '30 days' WHERE room_id = 7")
+        )
+
+    queued = await service.queue_reminders()
+    # only on a Sunday is the end of the week within the 24 hour window
+    expected = 3 if datetime.now(UTC).weekday() == 6 else 0
+    assert queued == expected
 
 
 async def test_reminders_do_not_crash_on_a_second_daily_run(env):

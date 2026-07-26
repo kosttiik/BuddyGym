@@ -71,8 +71,9 @@ class MemberProgress:
 class CoreReader:
     """Read-only view of core_db. The bot never writes there."""
 
-    def __init__(self, engine: AsyncEngine) -> None:
+    def __init__(self, engine: AsyncEngine, reminder_hour: int = 9) -> None:
         self._engine = engine
+        self._reminder_hour = reminder_hour
 
     async def events_after(self, last_id: int, limit: int) -> list[Event]:
         query = text(
@@ -183,50 +184,63 @@ class CoreReader:
     async def members_behind_goal(self, hours_before: int) -> list[MemberProgress]:
         """Members whose period closes within the window and who have not met their goal yet.
 
+        Every boundary is read in the member's own zone, and it is their local 9:00 that
+        picks them up, so the scheduler runs hourly and each member hears from it once.
         A member with an active freeze is skipped: the period is not judged for them.
         """
         query = text(
             """
             WITH grid AS (
-                SELECT m.room_id, r.name AS room_name, m.user_id, u.first_name,
+                SELECT m.room_id, r.name AS room_name, m.user_id, u.first_name, u.timezone,
                        COALESCE(m.goal_per_period, r.goal_per_period) AS goal,
                        m.sport_name, m.sport_emoji,
-                       ((m.joined_at AT TIME ZONE 'UTC')::date + (floor(
-                           (((now() AT TIME ZONE 'UTC')::date
-                             - (m.joined_at AT TIME ZONE 'UTC')::date))::numeric / r.period_days
-                       )::int * r.period_days)) AS period_start,
+                       (now() AT TIME ZONE u.timezone)::date AS today,
+                       CASE WHEN r.calendar_week
+                            THEN date_trunc('week', (now() AT TIME ZONE u.timezone))::date
+                            ELSE ((m.joined_at AT TIME ZONE u.timezone)::date + (floor(
+                                (((now() AT TIME ZONE u.timezone)::date
+                                  - (m.joined_at AT TIME ZONE u.timezone)::date))::numeric
+                                / r.period_days
+                            )::int * r.period_days))
+                       END AS period_start,
                        r.period_days,
                        EXISTS (
                            SELECT 1 FROM freezes f
                            WHERE f.room_id = m.room_id AND f.user_id = m.user_id
                              AND f.canceled_at IS NULL
-                             AND f.starts_at <= (now() AT TIME ZONE 'UTC')::date
-                             AND f.ends_at > (now() AT TIME ZONE 'UTC')::date
+                             AND f.starts_at <= (now() AT TIME ZONE u.timezone)::date
+                             AND f.ends_at > (now() AT TIME ZONE u.timezone)::date
                        ) AS frozen
                 FROM memberships m
                 JOIN rooms r ON r.id = m.room_id
                 JOIN users u ON u.id = m.user_id
                 WHERE r.deleted_at IS NULL
+                  AND extract(hour FROM now() AT TIME ZONE u.timezone) = :local_hour
             )
             SELECT g.room_id, g.room_name, g.user_id, g.first_name, g.goal,
                    g.sport_name, g.sport_emoji,
-                   (g.period_start + g.period_days)::timestamptz AS period_ends_at,
+                   ((g.period_start + g.period_days)::timestamp
+                    AT TIME ZONE g.timezone) AS period_ends_at,
                    g.frozen,
                    (
-                       SELECT count(DISTINCT (cr.checkin_created_at AT TIME ZONE 'UTC')::date)::int
+                       SELECT count(DISTINCT
+                                    (cr.checkin_created_at AT TIME ZONE g.timezone)::date)::int
                        FROM checkin_results cr
                        WHERE cr.room_id = g.room_id AND cr.user_id = g.user_id
                          AND cr.status = 'approved'
-                         AND (cr.checkin_created_at AT TIME ZONE 'UTC')::date >= g.period_start
+                         AND (cr.checkin_created_at AT TIME ZONE g.timezone)::date
+                             >= g.period_start
                    ) AS workouts_count
             FROM grid g
             WHERE NOT g.frozen
-              AND (g.period_start + g.period_days)::timestamptz
+              AND ((g.period_start + g.period_days)::timestamp AT TIME ZONE g.timezone)
                   BETWEEN now() AND now() + make_interval(hours => :hours)
             """
         )
         async with self._engine.connect() as conn:
-            rows = await conn.execute(query, {"hours": hours_before})
+            rows = await conn.execute(
+                query, {"hours": hours_before, "local_hour": self._reminder_hour}
+            )
             return [
                 MemberProgress(
                     user_id=row.user_id,

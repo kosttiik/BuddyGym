@@ -389,9 +389,8 @@ func TestResultsApplyIdempotent(t *testing.T) {
 		t.Fatalf("repeat Apply: %v, applied=%v, want false", err, applied)
 	}
 
-	count, err := results.PeriodCount(ctx, room.ID, 106)
-	if err != nil || count != 1 {
-		t.Errorf("PeriodCount = %d (%v), want 1", count, err)
+	if count := periodCount(t, results, room.ID, 106); count != 1 {
+		t.Errorf("period count = %d, want 1", count)
 	}
 	total, err := results.TotalApproved(ctx, 106)
 	if err != nil || total != 1 {
@@ -402,7 +401,7 @@ func TestResultsApplyIdempotent(t *testing.T) {
 	if err != nil || !applied {
 		t.Fatalf("Apply rejected: %v", err)
 	}
-	if count, _ := results.PeriodCount(ctx, room.ID, 106); count != 1 {
+	if count := periodCount(t, results, room.ID, 106); count != 1 {
 		t.Errorf("rejected result bumped counter: %d", count)
 	}
 	if total, _ := results.TotalApproved(ctx, 106); total != 1 {
@@ -431,14 +430,14 @@ func TestResultsPeriodRollover(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if count, _ := results.PeriodCount(ctx, room.ID, 107); count != 0 {
+	if count := periodCount(t, results, room.ID, 107); count != 0 {
 		t.Errorf("count from the closed period = %d, want 0", count)
 	}
 
 	if _, err := results.Apply(ctx, "chk-r3", room.ID, 107, storage.ResultApproved, now); err != nil {
 		t.Fatal(err)
 	}
-	if count, _ := results.PeriodCount(ctx, room.ID, 107); count != 1 {
+	if count := periodCount(t, results, room.ID, 107); count != 1 {
 		t.Errorf("count in the current period = %d, want 1", count)
 	}
 	if total, _ := results.TotalApproved(ctx, 107); total != 3 {
@@ -529,9 +528,69 @@ func TestResultsPeriodCountCollapsesSameDayCheckins(t *testing.T) {
 		}
 	}
 
-	count, err := results.PeriodCount(ctx, room.ID, 110)
-	if err != nil || count != 1 {
-		t.Errorf("PeriodCount = %d (%v), want 1", count, err)
+	if count := periodCount(t, results, room.ID, 110); count != 1 {
+		t.Errorf("period count = %d, want 1", count)
+	}
+}
+
+func periodCount(t *testing.T, results *storage.Results, roomID, userID int64) int {
+	t.Helper()
+	in, ok, err := results.Streak(context.Background(), roomID, userID)
+	if err != nil || !ok {
+		t.Fatalf("Streak: %v, found=%v", err, ok)
+	}
+	return in.CurrentCount(time.Now())
+}
+
+// A calendar-week room runs Monday to Sunday for everyone, and each member reads that grid
+// in their own zone: a Sunday night workout in Moscow belongs to the week that is closing,
+// even though UTC already calls it Monday.
+func TestResultsCalendarWeekInTheMemberZone(t *testing.T) {
+	ctx := context.Background()
+	results := storage.NewResults(pool(t))
+	mustUser(t, 118)
+	room, err := storage.NewRooms(pool(t)).Create(ctx, domain.Room{
+		Name: "week room", Kind: domain.RoomOpen, GoalPerPeriod: 3, PeriodDays: 7,
+		CalendarWeek: true, VotesRequired: 2, CreatorID: 118,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool(t).Exec(ctx, "UPDATE users SET timezone = 'Europe/Moscow' WHERE id = 118"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool(t).Exec(ctx,
+		"UPDATE memberships SET joined_at = '2026-07-20 09:00+03' WHERE room_id = $1", room.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	// 2026-07-26 is a Sunday; 22:00 Moscow is 19:00 UTC, still the same day either way
+	sunday := time.Date(2026, 7, 26, 22, 0, 0, 0, domain.Location("Europe/Moscow"))
+	if _, err := results.Apply(ctx, "chk-week", room.ID, 118, storage.ResultApproved, sunday); err != nil {
+		t.Fatal(err)
+	}
+	// 2026-07-27 01:30 Moscow is 22:30 UTC on the 26th: a new day locally, the old one in UTC
+	monday := time.Date(2026, 7, 27, 1, 30, 0, 0, domain.Location("Europe/Moscow"))
+	if _, err := results.Apply(ctx, "chk-week-2", room.ID, 118, storage.ResultApproved, monday); err != nil {
+		t.Fatal(err)
+	}
+
+	in, ok, err := results.Streak(ctx, room.ID, 118)
+	if err != nil || !ok {
+		t.Fatalf("Streak: %v, found=%v", err, ok)
+	}
+	if !in.CalendarWeek || in.Timezone != "Europe/Moscow" {
+		t.Fatalf("input = %+v, want a Moscow calendar-week grid", in)
+	}
+	if got := in.CurrentCount(sunday); got != 1 {
+		t.Errorf("Sunday count = %d, want 1", got)
+	}
+	if got := in.CurrentCount(monday); got != 1 {
+		t.Errorf("Monday count = %d, want 1 (the fresh week holds only the 27th)", got)
+	}
+	wantEnd := time.Date(2026, 8, 3, 0, 0, 0, 0, domain.Location("Europe/Moscow"))
+	if got := in.PeriodEndsAt(monday); !got.Equal(wantEnd) {
+		t.Errorf("period ends at %v, want %v", got, wantEnd)
 	}
 }
 

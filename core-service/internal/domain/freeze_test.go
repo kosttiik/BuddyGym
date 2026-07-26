@@ -83,11 +83,11 @@ func TestRoomStreakSkipsFrozenPeriods(t *testing.T) {
 		date(2026, 7, 1), date(2026, 7, 2), date(2026, 7, 3),
 		date(2026, 7, 21),
 	}
-	if got := RoomStreak(days, joined, 3, 7, now); got != 1 {
+	if got := input(days, joined, 3, 7).Streak(now); got != 1 {
 		t.Fatalf("without freeze = %d, want 1 (failed middle period burns)", got)
 	}
 	frozen := Freeze{StartsAt: date(2026, 7, 9), EndsAt: date(2026, 7, 14)}
-	if got := RoomStreak(days, joined, 3, 7, now, frozen); got != 4 {
+	if got := input(days, joined, 3, 7, frozen).Streak(now); got != 4 {
 		t.Errorf("with freeze = %d, want 4 (frozen period skipped, streak carries)", got)
 	}
 }
@@ -95,26 +95,26 @@ func TestRoomStreakSkipsFrozenPeriods(t *testing.T) {
 func TestPeriodJudgment(t *testing.T) {
 	joined := date(2026, 7, 15)
 	now := date(2026, 7, 18)
-	if has, _ := PeriodJudgment(nil, joined, 3, 7, now); has {
+	if has, _ := input(nil, joined, 3, 7).Judgment(now); has {
 		t.Error("no closed period yet must not be judged")
 	}
 
 	now = date(2026, 7, 24)
-	if has, failed := PeriodJudgment(nil, joined, 3, 7, now); !has || !failed {
+	if has, failed := input(nil, joined, 3, 7).Judgment(now); !has || !failed {
 		t.Errorf("empty closed period = %v %v, want judged failed", has, failed)
 	}
 	met := []time.Time{date(2026, 7, 15), date(2026, 7, 16), date(2026, 7, 17)}
-	if has, failed := PeriodJudgment(met, joined, 3, 7, now); !has || failed {
+	if has, failed := input(met, joined, 3, 7).Judgment(now); !has || failed {
 		t.Errorf("met closed period = %v %v, want judged passed", has, failed)
 	}
 
 	frozen := Freeze{StartsAt: date(2026, 7, 16), EndsAt: date(2026, 7, 20)}
-	if has, _ := PeriodJudgment(nil, joined, 3, 7, now, frozen); has {
+	if has, _ := input(nil, joined, 3, 7, frozen).Judgment(now); has {
 		t.Error("frozen closed period must not be judged")
 	}
 
 	laterFrozen := Freeze{StartsAt: date(2026, 7, 23), EndsAt: date(2026, 7, 27)}
-	if has, failed := PeriodJudgment(met, joined, 3, 7, date(2026, 7, 31), laterFrozen); !has || failed {
+	if has, failed := input(met, joined, 3, 7, laterFrozen).Judgment(date(2026, 7, 31)); !has || failed {
 		t.Errorf("judgment must fall through frozen period to the met one: %v %v", has, failed)
 	}
 }

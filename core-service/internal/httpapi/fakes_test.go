@@ -128,6 +128,16 @@ func (f *fakeUsers) UpdateLanguage(_ context.Context, id int64, language string)
 	return u, nil
 }
 
+func (f *fakeUsers) UpdateTimezone(_ context.Context, id int64, timezone string) (domain.User, error) {
+	u, ok := f.users[id]
+	if !ok {
+		return domain.User{}, storage.ErrNotFound
+	}
+	u.Timezone = timezone
+	f.users[id] = u
+	return u, nil
+}
+
 func (f *fakeUsers) Achievements(_ context.Context, userID int64) ([]domain.Achievement, error) {
 	return f.achs[userID], nil
 }

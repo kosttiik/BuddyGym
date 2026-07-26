@@ -107,8 +107,15 @@ func (f *fakeResults) StreaksByUser(_ context.Context, userID int64) ([]domain.S
 	}}, nil
 }
 
-func (f *fakeResults) PeriodCount(_ context.Context, roomID, userID int64) (int, error) {
-	return f.counts[resultKey{roomID, userID}], nil
+// one long period holding every recorded day, so CurrentCount reads back as the raw count
+func (f *fakeResults) Streak(_ context.Context, roomID, userID int64) (domain.StreakInput, bool, error) {
+	days := f.days[userID]
+	in := domain.StreakInput{RoomID: roomID, UserID: userID, Goal: 3, PeriodDays: 3650}
+	if len(days) > 0 {
+		in.JoinedAt = days[len(days)-1]
+		in.Days = days
+	}
+	return in, len(days) > 0, nil
 }
 
 type fakeBuddies struct {

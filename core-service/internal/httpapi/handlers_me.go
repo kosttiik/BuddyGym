@@ -17,8 +17,10 @@ type MeResponse struct {
 }
 
 type UpdateMeRequest struct {
-	Theme       *string `json:"theme,omitempty" example:"dark" enums:"default,dark,neon"`
-	Language    *string `json:"language,omitempty" example:"ru" enums:"ru,en"`
+	Theme    *string `json:"theme,omitempty" example:"dark" enums:"default,dark,neon"`
+	Language *string `json:"language,omitempty" example:"ru" enums:"ru,en"`
+	// Timezone is an IANA name; periods close at this zone's midnight.
+	Timezone    *string `json:"timezone,omitempty" example:"Europe/Moscow"`
 	StatusEmoji *string `json:"status_emoji,omitempty"`
 	StatusText  *string `json:"status_text,omitempty" example:"На массе"`
 }
@@ -104,6 +106,19 @@ func (s *Server) handlePatchMe(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		updated, err := s.users.UpdateLanguage(r.Context(), userID, *req.Language)
+		if err != nil {
+			s.mapError(w, err)
+			return
+		}
+		user = updated
+	}
+
+	if req.Timezone != nil {
+		if !domain.ValidTimezone(*req.Timezone) {
+			writeErr(w, http.StatusBadRequest, "unknown timezone")
+			return
+		}
+		updated, err := s.users.UpdateTimezone(r.Context(), userID, *req.Timezone)
 		if err != nil {
 			s.mapError(w, err)
 			return

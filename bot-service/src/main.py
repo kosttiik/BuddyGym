@@ -25,8 +25,9 @@ def build(settings: Settings) -> tuple[NotificationService, Bot | None, PhotoSou
     bot = Bot(settings.bot_token) if settings.mode is BotMode.LIVE and settings.bot_token else None
     photos = PhotoSource(settings)
     sender = Sender(bot, settings, photos, log)
+    reader = CoreReader(core_engine, settings.reminder_local_hour)
     return (
-        NotificationService(CoreReader(core_engine), sessions, sender, settings, log),
+        NotificationService(reader, sessions, sender, settings, log),
         bot,
         photos,
     )
@@ -50,7 +51,8 @@ async def main() -> None:
     service, bot, photos = build(settings)
 
     scheduler = AsyncIOScheduler(timezone="UTC")
-    scheduler.add_job(service.queue_reminders, "cron", hour=9, minute=0)
+    # hourly: the query picks the members whose own clock just struck the reminder hour
+    scheduler.add_job(service.queue_reminders, "cron", minute=0)
     scheduler.start()
 
     tasks = [asyncio.create_task(poll_forever(service, settings))]

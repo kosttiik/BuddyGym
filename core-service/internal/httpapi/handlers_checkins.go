@@ -13,6 +13,7 @@ import (
 	pbv1 "github.com/kosttiik/BuddyGym/core-service/internal/pb/buddygym/v1"
 
 	"github.com/kosttiik/BuddyGym/core-service/internal/checkin"
+	"github.com/kosttiik/BuddyGym/core-service/internal/domain"
 )
 
 const (
@@ -87,9 +88,6 @@ func (s *Server) handleCreateCheckin(w http.ResponseWriter, r *http.Request) {
 	var buddyIDs []int64
 	// set by the client after the user confirmed replacing today's checkin
 	replace := r.URL.Query().Get("replace") == "true"
-	// the client passes its Date.getTimezoneOffset() so "today" is the user's calendar day,
-	// not a UTC day: an evening and a next-morning workout must read as two different days
-	tzOffset := parseTZOffset(r.URL.Query().Get("tz_offset"))
 
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
 		r.Body = http.MaxBytesReader(w, r.Body, maxPhotoSize+1<<20)
@@ -142,7 +140,7 @@ func (s *Server) handleCreateCheckin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	existing, err := s.todaysCheckins(r.Context(), user.ID, targets, tzOffset)
+	existing, err := s.todaysCheckins(r.Context(), user.ID, targets, domain.Location(user.Timezone))
 	if err != nil {
 		s.mapError(w, err)
 		return
@@ -195,23 +193,10 @@ type DuplicateCheckinResponse struct {
 	Existing []checkin.Checkin `json:"existing"`
 }
 
-// parseTZOffset reads a JS getTimezoneOffset() value (minutes behind UTC, MSK = -180),
-// clamped to a real range; anything invalid falls back to UTC.
-func parseTZOffset(raw string) time.Duration {
-	if raw == "" {
-		return 0
-	}
-	m, err := strconv.Atoi(raw)
-	if err != nil || m < -14*60 || m > 14*60 {
-		return 0
-	}
-	return time.Duration(m) * time.Minute
-}
-
-func (s *Server) todaysCheckins(ctx context.Context, userID int64, targets []checkin.Target, tzOffset time.Duration) ([]checkin.Checkin, error) {
-	// local = UTC - offset; JS offset is negative east of UTC, so subtracting shifts forward
-	localNow := s.now().UTC().Add(-tzOffset)
-	today := localNow.Format(time.DateOnly)
+// todaysCheckins finds what the user already logged on their own calendar day: an evening
+// and a next-morning workout must read as two different days wherever they live.
+func (s *Server) todaysCheckins(ctx context.Context, userID int64, targets []checkin.Target, loc *time.Location) ([]checkin.Checkin, error) {
+	today := s.now().In(loc).Format(time.DateOnly)
 	seen := map[string]struct{}{}
 	var out []checkin.Checkin
 	const page = 100
@@ -228,7 +213,7 @@ func (s *Server) todaysCheckins(ctx context.Context, userID int64, targets []che
 				}
 				stop := len(list) < page
 				for _, c := range list {
-					day := c.CreatedAt.UTC().Add(-tzOffset).Format(time.DateOnly)
+					day := c.CreatedAt.In(loc).Format(time.DateOnly)
 					if day < today {
 						stop = true
 						continue

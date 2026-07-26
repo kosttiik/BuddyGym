@@ -20,32 +20,16 @@ func NewRooms(pool *pgxpool.Pool) *Rooms {
 	return &Rooms{pool: pool}
 }
 
-const roomColumns = "id, name, kind, invite_code, goal_per_period, period_days, votes_required, creator_id, created_at, avatar_key"
+const roomColumns = "id, name, kind, invite_code, goal_per_period, period_days, calendar_week, votes_required, creator_id, created_at, avatar_key"
 
-const roomColumnsR = "r.id, r.name, r.kind, r.invite_code, r.goal_per_period, r.period_days, r.votes_required, r.creator_id, r.created_at, r.avatar_key"
-
-// period grid anchored on joined_at, the same grid domain.RoomStreak walks
-const periodStartDate = `
-	((m.joined_at AT TIME ZONE 'UTC')::date + (floor(
-		(((now() AT TIME ZONE 'UTC')::date - (m.joined_at AT TIME ZONE 'UTC')::date))::numeric
-		/ r.period_days
-	)::int * r.period_days))`
-
-const periodAwareCount = `(
-	SELECT count(DISTINCT (cr.checkin_created_at AT TIME ZONE 'UTC')::date)::int
-	FROM checkin_results cr
-	WHERE cr.room_id = m.room_id AND cr.user_id = m.user_id AND cr.status = 'approved'
-	  AND (cr.checkin_created_at AT TIME ZONE 'UTC')::date >= ` + periodStartDate + `
-)`
-
-const periodEndsAt = `((` + periodStartDate + ` + r.period_days)::timestamptz)`
+const roomColumnsR = "r.id, r.name, r.kind, r.invite_code, r.goal_per_period, r.period_days, r.calendar_week, r.votes_required, r.creator_id, r.created_at, r.avatar_key"
 
 const effectiveGoal = `COALESCE(m.goal_per_period, r.goal_per_period)`
 
 func scanRoom(row pgx.Row) (domain.Room, error) {
 	var rm domain.Room
 	err := row.Scan(&rm.ID, &rm.Name, &rm.Kind, &rm.InviteCode, &rm.GoalPerPeriod,
-		&rm.PeriodDays, &rm.VotesRequired, &rm.CreatorID, &rm.CreatedAt, &rm.AvatarKey)
+		&rm.PeriodDays, &rm.CalendarWeek, &rm.VotesRequired, &rm.CreatorID, &rm.CreatedAt, &rm.AvatarKey)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.Room{}, ErrNotFound
 	}
@@ -74,11 +58,11 @@ func (r *Rooms) tryCreate(ctx context.Context, room domain.Room) (domain.Room, e
 	defer tx.Rollback(ctx)
 
 	created, err := scanRoom(tx.QueryRow(ctx, `
-		INSERT INTO rooms (name, kind, invite_code, goal_per_period, period_days, votes_required, creator_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO rooms (name, kind, invite_code, goal_per_period, period_days, calendar_week, votes_required, creator_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING `+roomColumns,
 		room.Name, room.Kind, room.InviteCode, room.GoalPerPeriod,
-		room.PeriodDays, room.VotesRequired, room.CreatorID))
+		room.PeriodDays, room.CalendarWeek, room.VotesRequired, room.CreatorID))
 	if err != nil {
 		return domain.Room{}, err
 	}
@@ -103,10 +87,11 @@ func (r *Rooms) GetByInvite(ctx context.Context, code string) (domain.Room, erro
 func (r *Rooms) Update(ctx context.Context, room domain.Room) (domain.Room, error) {
 	return scanRoom(r.pool.QueryRow(ctx, `
 		UPDATE rooms
-		SET name = $2, kind = $3, goal_per_period = $4, period_days = $5, votes_required = $6
+		SET name = $2, kind = $3, goal_per_period = $4, period_days = $5, calendar_week = $6, votes_required = $7
 		WHERE id = $1
 		RETURNING `+roomColumns,
-		room.ID, room.Name, room.Kind, room.GoalPerPeriod, room.PeriodDays, room.VotesRequired))
+		room.ID, room.Name, room.Kind, room.GoalPerPeriod, room.PeriodDays, room.CalendarWeek,
+		room.VotesRequired))
 }
 
 func (r *Rooms) AddAvatar(ctx context.Context, roomID, userID int64, key string) (domain.RoomAvatar, error) {
@@ -217,9 +202,9 @@ func (r *Rooms) Delete(ctx context.Context, id int64) error {
 
 func (r *Rooms) ListByUser(ctx context.Context, userID int64) ([]domain.RoomWithProgress, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT `+roomColumnsR+`, `+periodAwareCount+`,
+		SELECT `+roomColumnsR+`,
 		       (SELECT count(*) FROM memberships m2 WHERE m2.room_id = r.id),
-		       `+periodEndsAt+`, `+effectiveGoal+`
+		       `+effectiveGoal+`
 		FROM memberships m
 		JOIN rooms r ON r.id = m.room_id
 		WHERE m.user_id = $1 AND r.deleted_at IS NULL
@@ -233,8 +218,8 @@ func (r *Rooms) ListByUser(ctx context.Context, userID int64) ([]domain.RoomWith
 	for rows.Next() {
 		var rp domain.RoomWithProgress
 		if err := rows.Scan(&rp.ID, &rp.Name, &rp.Kind, &rp.InviteCode, &rp.GoalPerPeriod,
-			&rp.PeriodDays, &rp.VotesRequired, &rp.CreatorID, &rp.CreatedAt, &rp.AvatarKey,
-			&rp.WorkoutsCount, &rp.MembersCount, &rp.PeriodEndsAt, &rp.MyGoal); err != nil {
+			&rp.PeriodDays, &rp.CalendarWeek, &rp.VotesRequired, &rp.CreatorID, &rp.CreatedAt,
+			&rp.AvatarKey, &rp.MembersCount, &rp.MyGoal); err != nil {
 			return nil, err
 		}
 		rp.HasAvatar = rp.AvatarKey != ""
@@ -261,8 +246,8 @@ func (r *Rooms) ListOpen(ctx context.Context, userID int64) ([]domain.Room, erro
 	for rows.Next() {
 		var room domain.Room
 		if err := rows.Scan(&room.ID, &room.Name, &room.Kind, &room.InviteCode, &room.GoalPerPeriod,
-			&room.PeriodDays, &room.VotesRequired, &room.CreatorID, &room.CreatedAt,
-			&room.AvatarKey); err != nil {
+			&room.PeriodDays, &room.CalendarWeek, &room.VotesRequired, &room.CreatorID,
+			&room.CreatedAt, &room.AvatarKey); err != nil {
 			return nil, err
 		}
 		room.HasAvatar = room.AvatarKey != ""
@@ -274,8 +259,8 @@ func (r *Rooms) ListOpen(ctx context.Context, userID int64) ([]domain.Room, erro
 
 func (r *Rooms) Members(ctx context.Context, roomID int64) ([]domain.Member, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT u.id, u.username, u.first_name, u.photo_url, u.theme, u.rank,
-		       u.status_emoji, u.status_text, u.created_at, u.avatar_key, `+periodAwareCount+`, m.joined_at, `+periodEndsAt+`,
+		SELECT u.id, u.username, u.first_name, u.photo_url, u.theme, u.language, u.timezone, u.rank,
+		       u.status_emoji, u.status_text, u.created_at, u.avatar_key, m.joined_at,
 		       m.sport_name, m.sport_emoji, m.goal_per_period, `+effectiveGoal+`
 		FROM memberships m
 		JOIN users u ON u.id = m.user_id
@@ -291,8 +276,8 @@ func (r *Rooms) Members(ctx context.Context, roomID int64) ([]domain.Member, err
 	for rows.Next() {
 		var mb domain.Member
 		if err := rows.Scan(&mb.ID, &mb.Username, &mb.FirstName, &mb.PhotoURL, &mb.Theme,
-			&mb.Rank, &mb.StatusEmoji, &mb.StatusText, &mb.CreatedAt, &mb.AvatarKey,
-			&mb.WorkoutsCount, &mb.JoinedAt, &mb.PeriodEndsAt,
+			&mb.Language, &mb.Timezone, &mb.Rank, &mb.StatusEmoji, &mb.StatusText, &mb.CreatedAt,
+			&mb.AvatarKey, &mb.JoinedAt,
 			&mb.SportName, &mb.SportEmoji, &mb.GoalPerPeriod, &mb.EffectiveGoal); err != nil {
 			return nil, err
 		}

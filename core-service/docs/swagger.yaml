@@ -154,6 +154,9 @@ definitions:
         type: integer
       theme:
         type: string
+      timezone:
+        example: Europe/Moscow
+        type: string
       username:
         type: string
       workouts_count:
@@ -161,6 +164,8 @@ definitions:
     type: object
   domain.Room:
     properties:
+      calendar_week:
+        type: boolean
       created_at:
         type: string
       creator_id:
@@ -195,6 +200,8 @@ definitions:
     type: object
   domain.RoomWithProgress:
     properties:
+      calendar_week:
+        type: boolean
       created_at:
         type: string
       creator_id:
@@ -265,6 +272,9 @@ definitions:
         type: string
       theme:
         type: string
+      timezone:
+        example: Europe/Moscow
+        type: string
       username:
         type: string
     type: object
@@ -313,6 +323,12 @@ definitions:
     type: object
   httpapi.CreateRoomRequest:
     properties:
+      calendar_week:
+        description: |-
+          CalendarWeek runs the period from Monday to Sunday in each member's timezone and
+          pins period_days to 7; without it the period is a rolling window from the join date.
+        example: true
+        type: boolean
       goal_per_period:
         example: 3
         maximum: 100
@@ -426,6 +442,10 @@ definitions:
         - neon
         example: dark
         type: string
+      timezone:
+        description: Timezone is an IANA name; periods close at this zone's midnight.
+        example: Europe/Moscow
+        type: string
     type: object
   httpapi.UpdateMembershipRequest:
     properties:
@@ -443,6 +463,12 @@ definitions:
     type: object
   httpapi.UpdateRoomRequest:
     properties:
+      calendar_week:
+        description: |-
+          CalendarWeek runs the period from Monday to Sunday in each member's timezone and
+          pins period_days to 7; without it the period is a rolling window from the join date.
+        example: true
+        type: boolean
       goal_per_period:
         example: 3
         maximum: 100

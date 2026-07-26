@@ -35,7 +35,7 @@ type BuddiesRepo interface {
 type ResultsRepo interface {
 	Apply(ctx context.Context, checkinID string, roomID, userID int64, status string, createdAt time.Time) (bool, error)
 	StreaksByUser(ctx context.Context, userID int64) ([]domain.StreakInput, error)
-	PeriodCount(ctx context.Context, roomID, userID int64) (int, error)
+	Streak(ctx context.Context, roomID, userID int64) (domain.StreakInput, bool, error)
 }
 
 type EventsRepo interface {
@@ -105,23 +105,20 @@ func (s *Server) ApplyCheckinResult(ctx context.Context, req *pbv1.ApplyCheckinR
 			s.log.Error("credit buddies", "err", err, "checkin_id", req.GetCheckinId())
 		}
 	}
-	count, err := s.results.PeriodCount(ctx, req.GetRoomId(), req.GetUserId())
+	in, _, err := s.results.Streak(ctx, req.GetRoomId(), req.GetUserId())
 	if err != nil {
 		s.log.Error("period count", "err", err)
 		return nil, status.Error(codes.Internal, "apply failed")
 	}
+	count := in.CurrentCount(s.now())
 
 	if applied {
 		// the bot draws a progress bar on the verdict card, so the goal travels with the event
-		goal := 0
-		if room, err := s.rooms.Get(ctx, req.GetRoomId()); err == nil {
-			goal = room.GoalPerPeriod
-		}
 		s.emit(ctx, "checkin."+result, req.GetRoomId(), req.GetUserId(), map[string]any{
 			"checkin_id": req.GetCheckinId(),
 			"granted":    granted,
 			"done":       count,
-			"goal":       goal,
+			"goal":       in.Goal,
 		})
 	}
 	return &pbv1.ApplyCheckinResultResponse{
@@ -148,18 +145,14 @@ func (s *Server) creditBuddies(ctx context.Context, checkinID string, roomID int
 			s.log.Error("grant rewards", "err", err, "user_id", buddyID)
 		}
 		// the card draws a progress bar, so the buddy's own period count travels with the event
-		done, err := s.results.PeriodCount(ctx, roomID, buddyID)
+		in, _, err := s.results.Streak(ctx, roomID, buddyID)
 		if err != nil {
 			s.log.Error("period count", "err", err, "user_id", buddyID)
 		}
-		goal := 0
-		if room, err := s.rooms.Get(ctx, roomID); err == nil {
-			goal = room.GoalPerPeriod
-		}
 		s.emit(ctx, "buddy.credited", roomID, buddyID, map[string]any{
 			"checkin_id": checkinID,
-			"done":       done,
-			"goal":       goal,
+			"done":       in.CurrentCount(s.now()),
+			"goal":       in.Goal,
 		})
 	}
 	return nil
