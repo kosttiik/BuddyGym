@@ -31,8 +31,8 @@ flowchart TB
 
 ## Workspace layout
 
-The other two repositories are cloned into this one (both are gitignored). Compose and proto
-generation rely on these paths.
+The check-in service and [frontend](https://github.com/kosttiik/BuddyGym-Frontend) are cloned
+into this workspace (both are gitignored). Compose and proto generation rely on these paths.
 
 ```text
 BuddyGym/
@@ -82,10 +82,10 @@ Codegen: `make proto` (Go stubs, committed), `make swagger` (OpenAPI spec, fresh
 
 ## Notification bot
 
-[bot-service](bot-service/README.md) reads the `events` outbox in `core_db` and delivers Telegram
-cards and Web Push notifications: comments, vote requests, verdicts, achievements and reminders.
-It ships in `dry-run` mode, which renders every card to disk and sends nothing; flip `BOT_MODE`
-to `live` with a `BOT_NOTIFY_TOKEN` once the cards look right.
+[BuddyGym-Bot](https://github.com/kosttiik/BuddyGym-Bot) reads the `events` outbox in `core_db`
+and delivers Telegram cards and Web Push notifications: comments, vote requests, verdicts,
+achievements and reminders. It ships in `dry-run` mode, which renders every card to disk and
+sends nothing; flip `BOT_MODE` to `live` with a `BOT_NOTIFY_TOKEN` once the cards look right.
 
 ## Deploy
 
