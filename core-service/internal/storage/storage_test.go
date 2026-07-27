@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/pressly/goose/v3"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 
@@ -92,23 +94,56 @@ func mustRoom(t *testing.T, creatorID int64) domain.Room {
 func TestUsersPendingAvatars(t *testing.T) {
 	ctx := context.Background()
 	users := storage.NewUsers(pool(t))
+	accounts := storage.NewAccounts(pool(t))
 
-	if _, err := users.Upsert(ctx, 301, "a", "NoPhoto", ""); err != nil {
+	_, err := accounts.CreateTelegramUser(ctx, 301, "avatar_a", "NoPhoto", "")
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := users.Upsert(ctx, 302, "b", "NeverMirrored", "https://t.me/pic/302"); err != nil {
+	_, err = accounts.CreateTelegramUser(
+		ctx,
+		302,
+		"avatar_b",
+		"NeverMirrored",
+		"https://t.me/pic/302",
+	)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := users.Upsert(ctx, 303, "c", "Mirrored", "https://t.me/pic/303"); err != nil {
+	mirrored, err := accounts.CreateTelegramUser(
+		ctx,
+		303,
+		"avatar_c",
+		"Mirrored",
+		"https://t.me/pic/303",
+	)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := users.SetAvatar(ctx, 303, "avatars/303", "https://t.me/pic/303"); err != nil {
+	if err := users.SetAvatar(
+		ctx,
+		mirrored.ID,
+		"avatars/303",
+		"https://t.me/pic/303",
+	); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := users.Upsert(ctx, 304, "d", "ChangedPicture", "https://t.me/pic/304-new"); err != nil {
+	changed, err := accounts.CreateTelegramUser(
+		ctx,
+		304,
+		"avatar_d",
+		"ChangedPicture",
+		"https://t.me/pic/304-new",
+	)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := users.SetAvatar(ctx, 304, "avatars/304", "https://t.me/pic/304-old"); err != nil {
+	if err := users.SetAvatar(
+		ctx,
+		changed.ID,
+		"avatars/304",
+		"https://t.me/pic/304-old",
+	); err != nil {
 		t.Fatal(err)
 	}
 
@@ -118,7 +153,7 @@ func TestUsersPendingAvatars(t *testing.T) {
 	}
 	got := map[int64]string{}
 	for _, u := range pending {
-		got[u.ID] = u.PhotoURL
+		got[u.TelegramID] = u.PhotoURL
 	}
 	if _, ok := got[301]; ok {
 		t.Error("user without a telegram photo must not be queued")
@@ -156,6 +191,198 @@ func TestUsersUpsertGet(t *testing.T) {
 
 	if _, err := users.Get(ctx, 999999); !errors.Is(err, storage.ErrNotFound) {
 		t.Errorf("Get missing: err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestAccountsIdentitySessionsAndPreferences(t *testing.T) {
+	ctx := context.Background()
+	accounts := storage.NewAccounts(pool(t))
+
+	local, err := accounts.CreateLocalUser(ctx, "web_athlete", "Web Athlete", "hash")
+	if err != nil {
+		t.Fatalf("create local user: %v", err)
+	}
+	if local.ID <= 0 || local.ID == 7000001001 {
+		t.Fatalf("unexpected internal id: %d", local.ID)
+	}
+	telegram, err := accounts.CreateTelegramUser(
+		ctx,
+		7000001001,
+		"telegram_athlete",
+		"Telegram Athlete",
+		"https://t.me/avatar",
+	)
+	if err != nil {
+		t.Fatalf("create telegram user: %v", err)
+	}
+	byTelegram, err := accounts.UserByTelegram(ctx, 7000001001)
+	if err != nil || byTelegram.ID != telegram.ID {
+		t.Fatalf("telegram identity: user=%+v err=%v", byTelegram, err)
+	}
+	byPassword, hash, err := accounts.PasswordUser(ctx, "WEB_ATHLETE")
+	if err != nil || byPassword.ID != local.ID || hash != "hash" {
+		t.Fatalf("password identity: user=%+v hash=%q err=%v", byPassword, hash, err)
+	}
+
+	if err := accounts.CreateSession(ctx, local.ID, "old-refresh", time.Now().Add(time.Hour)); err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	rotated, err := accounts.RotateSession(
+		ctx,
+		"old-refresh",
+		"new-refresh",
+		time.Now().Add(time.Hour),
+	)
+	if err != nil || rotated.ID != local.ID {
+		t.Fatalf("rotate session: user=%+v err=%v", rotated, err)
+	}
+	if _, err := accounts.RotateSession(
+		ctx,
+		"old-refresh",
+		"replay-refresh",
+		time.Now().Add(time.Hour),
+	); !errors.Is(err, storage.ErrNotFound) {
+		t.Fatalf("refresh replay: %v", err)
+	}
+
+	if err := accounts.CreateLinkToken(ctx, local.ID, "link-token", time.Now().Add(time.Hour)); err != nil {
+		t.Fatalf("create link token: %v", err)
+	}
+	linked, err := accounts.LinkTelegram(ctx, "link-token", 7000001002)
+	if err != nil || linked.ID != local.ID {
+		t.Fatalf("link telegram: user=%+v err=%v", linked, err)
+	}
+
+	enabled, disabled := true, false
+	state, err := accounts.UpdateNotificationPreferences(ctx, local.ID, &enabled, &disabled)
+	if err != nil || !state.PushEnabled || state.TelegramNotificationsEnabled {
+		t.Fatalf("notification preferences: state=%+v err=%v", state, err)
+	}
+	subscription, err := accounts.UpsertPushSubscription(
+		ctx,
+		local.ID,
+		"https://push.example.test/one",
+		"p256dh",
+		"auth",
+	)
+	if err != nil || subscription.ID == "" {
+		t.Fatalf("push subscription: sub=%+v err=%v", subscription, err)
+	}
+	if err := accounts.DeletePushSubscription(ctx, local.ID, subscription.ID); err != nil {
+		t.Fatalf("delete push subscription: %v", err)
+	}
+}
+
+func TestWebAuthMigrationPreservesLegacyUsersAndRelations(t *testing.T) {
+	ctx := context.Background()
+	base := pool(t)
+	schema := fmt.Sprintf("legacy_migration_%d", time.Now().UnixNano())
+	if _, err := base.Exec(ctx, "CREATE SCHEMA "+schema); err != nil {
+		t.Fatal(err)
+	}
+
+	config, err := pgxpool.ParseConfig(base.Config().ConnString())
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.ConnConfig.RuntimeParams["search_path"] = schema
+	legacyPool, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		legacyPool.Close()
+		if _, err := base.Exec(ctx, "DROP SCHEMA "+schema+" CASCADE"); err != nil {
+			t.Errorf("drop schema: %v", err)
+		}
+	}()
+
+	db := stdlib.OpenDBFromPool(legacyPool)
+	defer db.Close()
+	provider, err := goose.NewProvider(goose.DialectPostgres, db, os.DirFS("migrations"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := provider.UpTo(ctx, 16); err != nil {
+		t.Fatalf("migrate legacy schema: %v", err)
+	}
+
+	if _, err := legacyPool.Exec(ctx, `
+		INSERT INTO users (id, username, first_name, created_at)
+		VALUES
+			(7001, 'Athlete', 'Legacy One', '2025-01-01T00:00:00Z'),
+			(7002, 'athlete', 'Legacy Two', '2026-01-01T00:00:00Z')`); err != nil {
+		t.Fatal(err)
+	}
+	var roomID int64
+	if err := legacyPool.QueryRow(ctx, `
+		INSERT INTO rooms (
+			name, kind, invite_code, goal_per_period, period_days, votes_required, creator_id
+		)
+		VALUES ('Legacy Team', 'open', 'legacy-code', 3, 7, 2, 7001)
+		RETURNING id`).Scan(&roomID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := legacyPool.Exec(ctx,
+		"INSERT INTO memberships (room_id, user_id) VALUES ($1, 7002)",
+		roomID,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := provider.UpTo(ctx, 17); err != nil {
+		t.Fatalf("apply web auth migration: %v", err)
+	}
+	if _, err := provider.Up(ctx); err != nil {
+		t.Fatalf("repeat migrations: %v", err)
+	}
+
+	var identities, membership int
+	if err := legacyPool.QueryRow(ctx,
+		"SELECT count(*) FROM auth_identities WHERE user_id IN (7001, 7002)",
+	).Scan(&identities); err != nil {
+		t.Fatal(err)
+	}
+	if err := legacyPool.QueryRow(ctx,
+		"SELECT count(*) FROM memberships WHERE room_id = $1 AND user_id = 7002",
+		roomID,
+	).Scan(&membership); err != nil {
+		t.Fatal(err)
+	}
+	if identities != 2 || membership != 1 {
+		t.Fatalf("legacy relations changed: identities=%d membership=%d", identities, membership)
+	}
+
+	var olderUsername, newerUsername string
+	if err := legacyPool.QueryRow(ctx,
+		"SELECT username FROM users WHERE id = 7001",
+	).Scan(&olderUsername); err != nil {
+		t.Fatal(err)
+	}
+	if err := legacyPool.QueryRow(ctx,
+		"SELECT username FROM users WHERE id = 7002",
+	).Scan(&newerUsername); err != nil {
+		t.Fatal(err)
+	}
+	if olderUsername != "" || newerUsername != "athlete" {
+		t.Fatalf("case-insensitive duplicate resolution: older=%q newer=%q",
+			olderUsername, newerUsername)
+	}
+
+	accounts := storage.NewAccounts(legacyPool)
+	legacy, err := accounts.UserByTelegram(ctx, 7001)
+	if err != nil || legacy.ID != 7001 {
+		t.Fatalf("legacy Telegram identity: user=%+v err=%v", legacy, err)
+	}
+	local, err := accounts.CreateLocalUser(ctx, "web_user", "Web User", "hash")
+	if err != nil {
+		t.Fatalf("create local user after migration: %v", err)
+	}
+	if local.ID <= 7002 {
+		t.Fatalf("sequence did not advance beyond legacy IDs: %d", local.ID)
+	}
+	if _, err := accounts.CreateLocalUser(ctx, "ATHLETE", "Duplicate", "hash"); err == nil {
+		t.Fatal("case-insensitive duplicate username was accepted")
 	}
 }
 

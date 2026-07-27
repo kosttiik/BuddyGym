@@ -15,6 +15,152 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/auth/login": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Log in with a username and password",
+                "parameters": [
+                    {
+                        "description": "credentials",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.AuthPasswordRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.AuthTelegramResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/logout": {
+            "post": {
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Log out the current refresh session",
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                }
+            }
+        },
+        "/auth/refresh": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Rotate a refresh session",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.AuthTelegramResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/register": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Register with a username and password",
+                "parameters": [
+                    {
+                        "description": "new account",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.AuthPasswordRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.AuthTelegramResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/auth/telegram": {
             "post": {
                 "description": "Validates Mini App initData signature, upserts the user and issues a Bearer token for all other endpoints.",
@@ -75,11 +221,6 @@ const docTemplate = `{
         },
         "/checkins": {
             "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
                 "description": "Submits one workout proof to every listed room. A photo is uploaded once and shared by all of them, so posting to several rooms never stores it twice. Send multipart/form-data with a \"photo\" file (up to 10 MB) and repeated \"room_ids\" fields, or JSON with a geo point and room_ids for the fast path. The caller must be a member of every room.",
                 "consumes": [
                     "multipart/form-data",
@@ -186,16 +327,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/httpapi.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/checkins/{id}/buddies": {
-            "post": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/checkins/{id}/buddies": {
+            "post": {
                 "description": "Adds buddies to a checkin that is still being voted on. Only the author can tag, and buddies who are not members of the checkin room are ignored. The workout is credited to them once the room approves the checkin, so a rejected photo hands out nothing.",
                 "consumes": [
                     "application/json"
@@ -265,16 +406,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/httpapi.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/checkins/{id}/buddies/{userId}": {
-            "delete": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/checkins/{id}/buddies/{userId}": {
+            "delete": {
                 "description": "Untags a buddy from a checkin. Only the author can untag, and only while the checkin is still pending: once it is approved the workout is already theirs.",
                 "produces": [
                     "application/json"
@@ -333,16 +474,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/httpapi.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/checkins/{id}/comments": {
-            "get": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/checkins/{id}/comments": {
+            "get": {
                 "produces": [
                     "application/json"
                 ],
@@ -399,14 +540,14 @@ const docTemplate = `{
                             "$ref": "#/definitions/httpapi.ErrorResponse"
                         }
                     }
-                }
-            },
-            "post": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            },
+            "post": {
                 "description": "Room members only. Send JSON with a body, or multipart/form-data with a \"body\" field and an optional \"photo\" file up to 5 MB. Either the text or the photo must be there.",
                 "consumes": [
                     "application/json",
@@ -473,16 +614,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/httpapi.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/checkins/{id}/comments/{commentId}": {
-            "delete": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/checkins/{id}/comments/{commentId}": {
+            "delete": {
                 "description": "The author can delete their own comment; the room creator can delete any.",
                 "tags": [
                     "checkins"
@@ -532,16 +673,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/httpapi.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/checkins/{id}/comments/{commentId}/like": {
-            "post": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/checkins/{id}/comments/{commentId}/like": {
+            "post": {
                 "description": "Idempotent: liking twice leaves one like.",
                 "produces": [
                     "application/json"
@@ -591,14 +732,14 @@ const docTemplate = `{
                             "$ref": "#/definitions/httpapi.ErrorResponse"
                         }
                     }
-                }
-            },
-            "delete": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            },
+            "delete": {
                 "produces": [
                     "application/json"
                 ],
@@ -647,16 +788,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/httpapi.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/checkins/{id}/comments/{commentId}/photo": {
-            "get": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/checkins/{id}/comments/{commentId}/photo": {
+            "get": {
                 "description": "Room members only. The bucket is private and the bytes are proxied by core, so browsers must fetch this with XHR rather than a plain \u003cimg src\u003e.",
                 "produces": [
                     "image/jpeg"
@@ -706,16 +847,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/httpapi.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/checkins/{id}/photo": {
-            "get": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/checkins/{id}/photo": {
+            "get": {
                 "description": "Streams the proof photo. The object storage bucket is private: only members of the room the checkin belongs to can read it, and the bytes are proxied through core-service. Requires a Bearer token, so browsers must fetch it via XHR rather than a plain \u003cimg src\u003e.",
                 "produces": [
                     "image/jpeg",
@@ -765,16 +906,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/httpapi.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/checkins/{id}/vote": {
-            "post": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/checkins/{id}/vote": {
+            "post": {
                 "description": "Approves or rejects a peer checkin. Only members of the checkin room can vote; voting for your own checkin is forbidden.",
                 "consumes": [
                     "application/json"
@@ -847,7 +988,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/httpapi.ErrorResponse"
                         }
                     }
-                }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
             }
         },
         "/health": {
@@ -878,11 +1024,6 @@ const docTemplate = `{
         },
         "/me": {
             "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
                 "description": "Returns the authenticated user profile with achievements.",
                 "produces": [
                     "application/json"
@@ -910,14 +1051,14 @@ const docTemplate = `{
                             "$ref": "#/definitions/httpapi.ErrorResponse"
                         }
                     }
-                }
-            },
-            "patch": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            },
+            "patch": {
                 "description": "Changes the theme and the status line. Every field is optional; only the ones present are written. Empty strings clear the status. The rank is derived from workouts and cannot be set.",
                 "consumes": [
                     "application/json"
@@ -965,16 +1106,362 @@ const docTemplate = `{
                             "$ref": "#/definitions/httpapi.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/rooms": {
-            "get": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
+                ]
+            }
+        },
+        "/me/avatar": {
+            "put": {
+                "consumes": [
+                    "multipart/form-data"
                 ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "me"
+                ],
+                "summary": "Upload my avatar",
+                "parameters": [
+                    {
+                        "type": "file",
+                        "description": "profile picture",
+                        "name": "photo",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/domain.User"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            },
+            "delete": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "me"
+                ],
+                "summary": "Delete my custom avatar",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/domain.User"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/me/credentials": {
+            "patch": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "me"
+                ],
+                "summary": "Set or replace web credentials",
+                "parameters": [
+                    {
+                        "description": "web credentials",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.SetCredentialsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.AuthTelegramResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/me/notification-preferences": {
+            "patch": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "me"
+                ],
+                "summary": "Update notification channels",
+                "parameters": [
+                    {
+                        "description": "channel preferences",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.NotificationPreferencesRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/domain.AccountState"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/me/push-subscriptions": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "me"
+                ],
+                "summary": "Register a Web Push subscription",
+                "parameters": [
+                    {
+                        "description": "browser subscription",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.PushSubscriptionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/domain.PushSubscription"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/me/push-subscriptions/{id}": {
+            "delete": {
+                "tags": [
+                    "me"
+                ],
+                "summary": "Delete a Web Push subscription",
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/me/telegram-link": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "me"
+                ],
+                "summary": "Create a Telegram account-link token",
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.TelegramLinkResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/push/public-key": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "push"
+                ],
+                "summary": "Get the Web Push application key",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.PushPublicKeyResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/httpapi.ErrorResponse"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/rooms": {
+            "get": {
                 "description": "Rooms the user belongs to, with the current period workout counter.",
                 "produces": [
                     "application/json"
@@ -1005,14 +1492,14 @@ const docTemplate = `{
                             "$ref": "#/definitions/httpapi.ErrorResponse"
                         }
                     }
-                }
-            },
-            "post": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            },
+            "post": {
                 "description": "Creates a room and enrolls the creator. Returns the room with its invite code.",
                 "consumes": [
                     "application/json"
@@ -1060,16 +1547,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/httpapi.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/rooms/join": {
-            "post": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/rooms/join": {
+            "post": {
                 "description": "Joins any room using its invite code. Idempotent.",
                 "consumes": [
                     "application/json"
@@ -1123,16 +1610,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/httpapi.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/rooms/open": {
-            "get": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/rooms/open": {
+            "get": {
                 "description": "Rooms anyone can join, excluding the ones the user is already in. Invite codes are not returned.",
                 "produces": [
                     "application/json"
@@ -1163,16 +1650,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/httpapi.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/rooms/{id}": {
-            "get": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/rooms/{id}": {
+            "get": {
                 "description": "Room with members. Invite-only rooms are visible to members only; the invite code is hidden from non-members.",
                 "produces": [
                     "application/json"
@@ -1227,14 +1714,14 @@ const docTemplate = `{
                             "$ref": "#/definitions/httpapi.ErrorResponse"
                         }
                     }
-                }
-            },
-            "delete": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            },
+            "delete": {
                 "description": "Deletes a room and its memberships. Only the creator may do this.",
                 "tags": [
                     "rooms"
@@ -1283,14 +1770,14 @@ const docTemplate = `{
                             "$ref": "#/definitions/httpapi.ErrorResponse"
                         }
                     }
-                }
-            },
-            "patch": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            },
+            "patch": {
                 "description": "Updates room settings. Only the creator may do this.",
                 "consumes": [
                     "application/json"
@@ -1357,16 +1844,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/httpapi.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/rooms/{id}/avatar": {
-            "get": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/rooms/{id}/avatar": {
+            "get": {
                 "description": "Streams the newest picture of the room from private object storage. Requires a Bearer token, so browsers must fetch it via XHR rather than a plain \u003cimg src\u003e. Returns 404 when the room has no picture.",
                 "produces": [
                     "image/jpeg"
@@ -1409,14 +1896,14 @@ const docTemplate = `{
                             "$ref": "#/definitions/httpapi.ErrorResponse"
                         }
                     }
-                }
-            },
-            "put": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            },
+            "put": {
                 "description": "Any room member may add one. Send multipart/form-data with a \"photo\" file up to 5 MB. The new picture becomes the face of the room; the previous ones stay in the gallery.",
                 "consumes": [
                     "multipart/form-data"
@@ -1481,16 +1968,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/httpapi.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/rooms/{id}/avatars": {
-            "get": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/rooms/{id}/avatars": {
+            "get": {
                 "description": "Room members only. Newest first; the first entry is the picture the room currently wears.",
                 "produces": [
                     "application/json"
@@ -1548,16 +2035,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/httpapi.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/rooms/{id}/avatars/{avatarId}": {
-            "get": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/rooms/{id}/avatars/{avatarId}": {
+            "get": {
                 "description": "Room members only. Serves an older picture the room used to wear.",
                 "produces": [
                     "image/jpeg"
@@ -1613,14 +2100,14 @@ const docTemplate = `{
                             "$ref": "#/definitions/httpapi.ErrorResponse"
                         }
                     }
-                }
-            },
-            "delete": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            },
+            "delete": {
                 "description": "The member who uploaded it or the room creator. When the current picture goes, the room falls back to the newest one left.",
                 "tags": [
                     "rooms"
@@ -1676,16 +2163,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/httpapi.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/rooms/{id}/checkins": {
-            "get": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/rooms/{id}/checkins": {
+            "get": {
                 "produces": [
                     "application/json"
                 ],
@@ -1766,16 +2253,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/httpapi.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/rooms/{id}/freeze": {
-            "post": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/rooms/{id}/freeze": {
+            "post": {
                 "description": "Schedules a freeze: periods overlapping it are not judged. One active or scheduled freeze at a time; a cooldown of max(7, length) days follows each freeze.",
                 "consumes": [
                     "application/json"
@@ -1842,14 +2329,14 @@ const docTemplate = `{
                             "$ref": "#/definitions/httpapi.ErrorResponse"
                         }
                     }
-                }
-            },
-            "delete": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            },
+            "delete": {
                 "description": "Cancels the scheduled freeze or unfreezes early. The cooldown counts the days actually used.",
                 "tags": [
                     "rooms"
@@ -1898,16 +2385,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/httpapi.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/rooms/{id}/join": {
-            "post": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/rooms/{id}/join": {
+            "post": {
                 "description": "Joins an open room by id. Invite-only rooms require POST /rooms/join with a code. Idempotent.",
                 "produces": [
                     "application/json"
@@ -1962,16 +2449,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/httpapi.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/rooms/{id}/leave": {
-            "post": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/rooms/{id}/leave": {
+            "post": {
                 "produces": [
                     "application/json"
                 ],
@@ -2016,16 +2503,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/httpapi.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/rooms/{id}/membership": {
-            "patch": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/rooms/{id}/membership": {
+            "patch": {
                 "description": "Sets the member's personal sport and workout goal for this room. Null goal falls back to the room goal, empty strings clear the sport.",
                 "consumes": [
                     "application/json"
@@ -2086,16 +2573,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/httpapi.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/users/{id}": {
-            "get": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/users/{id}": {
+            "get": {
                 "description": "Public profile of any user by id, with achievements.",
                 "produces": [
                     "application/json"
@@ -2144,16 +2631,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/httpapi.ErrorResponse"
                         }
                     }
-                }
-            }
-        },
-        "/users/{id}/avatar": {
-            "get": {
+                },
                 "security": [
                     {
                         "BearerAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/users/{id}/avatar": {
+            "get": {
                 "description": "Streams the mirrored Telegram profile picture. Telegram serves avatars from hosts our users cannot reach, so core keeps a copy in private object storage and proxies the bytes. Requires a Bearer token, so browsers must fetch it via XHR rather than a plain \u003cimg src\u003e. Returns 404 when the user has no avatar.",
                 "produces": [
                     "image/jpeg"
@@ -2196,7 +2683,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/httpapi.ErrorResponse"
                         }
                     }
-                }
+                },
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ]
             }
         }
     },
@@ -2274,6 +2766,23 @@ const docTemplate = `{
                 },
                 "lon": {
                     "type": "number"
+                }
+            }
+        },
+        "domain.AccountState": {
+            "type": "object",
+            "properties": {
+                "push_enabled": {
+                    "type": "boolean"
+                },
+                "telegram_linked": {
+                    "type": "boolean"
+                },
+                "telegram_notifications_enabled": {
+                    "type": "boolean"
+                },
+                "web_login_enabled": {
+                    "type": "boolean"
                 }
             }
         },
@@ -2440,6 +2949,23 @@ const docTemplate = `{
                 },
                 "workouts_count": {
                     "type": "integer"
+                }
+            }
+        },
+        "domain.PushSubscription": {
+            "type": "object",
+            "properties": {
+                "auth": {
+                    "type": "string"
+                },
+                "endpoint": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "p256dh": {
+                    "type": "string"
                 }
             }
         },
@@ -2619,12 +3145,34 @@ const docTemplate = `{
                 }
             }
         },
+        "httpapi.AuthPasswordRequest": {
+            "type": "object",
+            "properties": {
+                "first_name": {
+                    "type": "string",
+                    "example": "Константин"
+                },
+                "password": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "minLength": 8,
+                    "example": "correct horse battery staple"
+                },
+                "username": {
+                    "type": "string",
+                    "example": "kostik"
+                }
+            }
+        },
         "httpapi.AuthTelegramRequest": {
             "type": "object",
             "properties": {
                 "init_data": {
                     "type": "string",
                     "example": "query_id=...\u0026user=...\u0026auth_date=...\u0026hash=..."
+                },
+                "link_token": {
+                    "type": "string"
                 }
             }
         },
@@ -2794,6 +3342,9 @@ const docTemplate = `{
         "httpapi.MeResponse": {
             "type": "object",
             "properties": {
+                "account": {
+                    "$ref": "#/definitions/domain.AccountState"
+                },
                 "achievements": {
                     "type": "array",
                     "items": {
@@ -2811,6 +3362,39 @@ const docTemplate = `{
                 }
             }
         },
+        "httpapi.NotificationPreferencesRequest": {
+            "type": "object",
+            "properties": {
+                "push_enabled": {
+                    "type": "boolean"
+                },
+                "telegram_enabled": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "httpapi.PushPublicKeyResponse": {
+            "type": "object",
+            "properties": {
+                "public_key": {
+                    "type": "string"
+                }
+            }
+        },
+        "httpapi.PushSubscriptionRequest": {
+            "type": "object",
+            "properties": {
+                "auth": {
+                    "type": "string"
+                },
+                "endpoint": {
+                    "type": "string"
+                },
+                "p256dh": {
+                    "type": "string"
+                }
+            }
+        },
         "httpapi.RoomDetailResponse": {
             "type": "object",
             "properties": {
@@ -2825,9 +3409,42 @@ const docTemplate = `{
                 }
             }
         },
+        "httpapi.SetCredentialsRequest": {
+            "type": "object",
+            "properties": {
+                "current_password": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string",
+                    "maxLength": 128,
+                    "minLength": 8,
+                    "example": "correct horse battery staple"
+                },
+                "username": {
+                    "type": "string",
+                    "example": "kostik"
+                }
+            }
+        },
+        "httpapi.TelegramLinkResponse": {
+            "type": "object",
+            "properties": {
+                "expires_at": {
+                    "type": "string"
+                },
+                "token": {
+                    "type": "string"
+                }
+            }
+        },
         "httpapi.UpdateMeRequest": {
             "type": "object",
             "properties": {
+                "first_name": {
+                    "type": "string",
+                    "example": "Константин"
+                },
                 "language": {
                     "type": "string",
                     "enum": [
@@ -2856,6 +3473,10 @@ const docTemplate = `{
                     "description": "Timezone is an IANA name; periods close at this zone's midnight.",
                     "type": "string",
                     "example": "Europe/Moscow"
+                },
+                "username": {
+                    "type": "string",
+                    "example": "kostik"
                 }
             }
         },

@@ -54,7 +54,7 @@ func TestSyncSkipsWhenSourceUnchanged(t *testing.T) {
 	fetcher := &fakeFetcher{data: []byte("jpeg")}
 	mirror, users, _ := newMirror(t, fetcher)
 
-	err := mirror.Sync(context.Background(), 7, "https://t.me/pic/a", "https://t.me/pic/a")
+	err := mirror.Sync(context.Background(), 7, 7, "https://t.me/pic/a", "https://t.me/pic/a")
 	if err != nil {
 		t.Fatalf("Sync: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestSyncMirrorsNewPicture(t *testing.T) {
 	fetcher := &fakeFetcher{data: []byte("jpeg")}
 	mirror, users, store := newMirror(t, fetcher)
 
-	if err := mirror.Sync(context.Background(), 7, "https://t.me/pic/b", "https://t.me/pic/a"); err != nil {
+	if err := mirror.Sync(context.Background(), 7, 7, "https://t.me/pic/b", "https://t.me/pic/a"); err != nil {
 		t.Fatalf("Sync: %v", err)
 	}
 	if got := string(store.objects["avatars/7"]); got != "jpeg" {
@@ -83,7 +83,7 @@ func TestSyncClearsWhenTelegramHasNoPicture(t *testing.T) {
 	fetcher := &fakeFetcher{data: []byte("jpeg")}
 	mirror, users, store := newMirror(t, fetcher)
 
-	if err := mirror.Sync(context.Background(), 7, "", "https://t.me/pic/a"); err != nil {
+	if err := mirror.Sync(context.Background(), 7, 7, "", "https://t.me/pic/a"); err != nil {
 		t.Fatalf("Sync: %v", err)
 	}
 	if fetcher.calls != 0 {
@@ -103,7 +103,7 @@ func TestSyncRecordsSourceWhenTelegramHasNoPhoto(t *testing.T) {
 	fetcher := &fakeFetcher{err: avatar.ErrNoPhoto}
 	mirror, users, store := newMirror(t, fetcher)
 
-	if err := mirror.Sync(context.Background(), 7, "https://t.me/pic/b", ""); err != nil {
+	if err := mirror.Sync(context.Background(), 7, 7, "https://t.me/pic/b", ""); err != nil {
 		t.Fatalf("Sync: %v", err)
 	}
 	if users.key != "" || users.source != "https://t.me/pic/b" {
@@ -118,7 +118,7 @@ func TestSyncPropagatesFetchFailure(t *testing.T) {
 	fetcher := &fakeFetcher{err: errors.New("telegram is down")}
 	mirror, users, _ := newMirror(t, fetcher)
 
-	if err := mirror.Sync(context.Background(), 7, "https://t.me/pic/b", ""); err == nil {
+	if err := mirror.Sync(context.Background(), 7, 7, "https://t.me/pic/b", ""); err == nil {
 		t.Fatal("Sync succeeded, want the fetch error")
 	}
 	// a failed mirror must not record the source, or it would never be retried

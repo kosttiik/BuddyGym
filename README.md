@@ -1,12 +1,12 @@
 # BuddyGym
 
-Telegram Mini App: gather in rooms and keep each other accountable for gym visits. A workout is confirmed by a photo and peer votes from room members (or by a geo tag as the fast path). Regularity earns achievements, statuses and profile themes.
+Telegram Mini App and installable PWA: gather in rooms and keep each other accountable for gym visits. A workout is confirmed by a photo and peer votes from room members (or by a geo tag as the fast path). Regularity earns achievements, statuses and profile themes.
 
 ## Architecture
 
 ```mermaid
 flowchart TB
-    tma["Telegram Mini App<br>(frontend)"]
+    clients["Telegram Mini App + PWA<br>(frontend)"]
     nginx["nginx<br>static + reverse proxy"]
     core["core-service · Go<br>auth, users, rooms, rewards"]
     checkin["checkin-service · Python<br>photos, geo, peer votes"]
@@ -15,7 +15,7 @@ flowchart TB
     checkindb[("checkin-db<br>PostgreSQL")]
     s3[("MinIO<br>private photo bucket")]
 
-    tma -- HTTPS --> nginx
+    clients -- HTTPS --> nginx
     nginx --> core
     core <-- gRPC --> checkin
     core --> coredb
@@ -24,7 +24,7 @@ flowchart TB
     checkin --> s3
 ```
 
-- **core-service** (Go) is the API gateway for the frontend: Telegram auth, users, rooms, membership, rewards. It also implements `CoreInternalService` (gRPC) for callbacks from checkin.
+- **core-service** (Go) is the API gateway for the frontend: Telegram and password auth, linked identities, users, rooms, membership, rewards and push subscriptions. It also implements `CoreInternalService` (gRPC) for callbacks from checkin.
 - **checkin-service** (Python) owns the checkin lifecycle: photos, geo, peer votes, timeouts, photo retention. It implements `CheckinService` (gRPC) and calls core when a checkin reaches a final status.
 - Service contracts live in [proto/buddygym/v1](proto/buddygym/v1) and are generated for both languages (`make proto`, `make proto-py`).
 - One Postgres container, two databases: `core_db` and `checkin_db`.
@@ -38,7 +38,7 @@ generation rely on these paths.
 BuddyGym/
 ├── core-service/     Go (this repository)
 ├── checkin-service/  Python (separate repository)
-├── frontend/         Telegram Mini App (separate repository)
+├── frontend/         Telegram Mini App and PWA (separate repository)
 ├── proto/            shared gRPC contracts
 └── docker-compose.yml
 ```
@@ -58,14 +58,16 @@ Photos are private end to end:
 ## Quick start
 
 ```bash
-cp .env.example .env   # set BOT_TOKEN, JWT_SECRET and GEOAPIFY_API_KEY
+cp .env.example .env   # set bot, JWT, VAPID and Geoapify credentials
 docker compose up -d --build
 curl localhost:8080/api/v1/health
 ```
 
 Swagger UI: `http://localhost:8080/api/v1/docs`
 
-Auth: `POST /api/v1/auth/telegram` exchanges Telegram `initData` for a JWT; all other endpoints expect `Authorization: Bearer <token>`. Redis backs rate limiting: 10/min per IP on token exchange, 120/min per user on the API, 20/hour per user on checkin creation.
+Auth: `POST /api/v1/auth/telegram` exchanges Telegram `initData`; `/auth/register` and `/auth/login` support the browser. Access JWTs stay in memory and browser sessions rotate an HttpOnly refresh cookie. Redis backs rate limiting: 10/min per IP on auth, 120/min per user on the API, 20/hour per user on checkin creation.
+
+A linked Telegram identity can replace forgotten web credentials during the short-lived access session issued by a fresh Telegram launch. Password and refresh-session tokens still require the current password.
 
 ## Development (core-service)
 
@@ -80,8 +82,8 @@ Codegen: `make proto` (Go stubs, committed), `make swagger` (OpenAPI spec, fresh
 
 ## Notification bot
 
-[bot-service](bot-service/README.md) reads the `events` outbox in `core_db` and delivers branded
-cards in Telegram: comments, vote requests, verdicts, achievements and end-of-period reminders.
+[bot-service](bot-service/README.md) reads the `events` outbox in `core_db` and delivers Telegram
+cards and Web Push notifications: comments, vote requests, verdicts, achievements and reminders.
 It ships in `dry-run` mode, which renders every card to disk and sends nothing; flip `BOT_MODE`
 to `live` with a `BOT_NOTIFY_TOKEN` once the cards look right.
 

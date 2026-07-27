@@ -1,7 +1,8 @@
 # bot-service
 
-Telegram notification bot for BuddyGym. It reads the `events` outbox in `core_db`, renders a
-branded card per notification with Pillow, and delivers it as a photo message.
+Notification worker for BuddyGym. It reads the `events` outbox in `core_db`, renders a branded
+Telegram card with Pillow, and fans the same event out through Telegram and Web Push according
+to each account's preferences.
 
 ## How it works
 
@@ -12,6 +13,7 @@ flowchart LR
     queue --> sender[sender]
     sender -->|sendPhoto placeholder| tg[Telegram]
     sender -->|editMessageMedia card| tg
+    sender -->|Web Push| pwa[PWA]
     minio[(MinIO)] --> sender
     checkin[[checkin-service gRPC]] --> sender
 ```
@@ -42,6 +44,9 @@ flowchart LR
 
 `BOT_MODE=dry-run` (default) renders every card to `BOT_DRY_RUN_DIR` with its payload and sends
 nothing. `BOT_MODE=live` needs `BOT_TOKEN` and talks to Telegram.
+
+Web Push is enabled when `VAPID_PRIVATE_KEY` is set. The matching public key is exposed by
+core-service through `VAPID_PUBLIC_KEY`; both values must belong to the same P-256 key pair.
 
 ## Development
 

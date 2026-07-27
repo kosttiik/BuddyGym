@@ -54,6 +54,9 @@ class Settings(BaseSettings):
     reminder_hours_before: int = Field(default=24, validation_alias="REMINDER_HOURS_BEFORE", ge=1)
     # the hour of the member's own day the reminder goes out, so the scheduler ticks hourly
     reminder_local_hour: int = Field(default=9, validation_alias="REMINDER_LOCAL_HOUR", ge=0, le=23)
+    vapid_private_key: str = Field(default="", validation_alias="VAPID_PRIVATE_KEY")
+    vapid_subject: str = Field(default="mailto:admin@buddygym.ru", validation_alias="VAPID_SUBJECT")
+    web_app_url: str = Field(default="https://buddygym.ru", validation_alias="WEB_APP_URL")
 
     @property
     def bot_sqlalchemy_dsn(self) -> str:

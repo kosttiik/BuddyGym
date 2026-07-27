@@ -91,7 +91,7 @@ func backfillAvatars(log *slog.Logger) error {
 
 	var done, failed int
 	for _, u := range pending {
-		if err := mirror.Sync(ctx, u.ID, u.PhotoURL, u.AvatarSource); err != nil {
+		if err := mirror.Sync(ctx, u.ID, u.TelegramID, u.PhotoURL, u.AvatarSource); err != nil {
 			log.Error("mirror avatar", "err", err, "user_id", u.ID)
 			failed++
 			continue
@@ -136,6 +136,7 @@ func run(log *slog.Logger) error {
 	defer conn.Close()
 
 	users := storage.NewUsers(pool)
+	accounts := storage.NewAccounts(pool)
 	rooms := storage.NewRooms(pool)
 	checkinClient := checkin.NewClient(conn)
 	results := storage.NewResults(pool)
@@ -167,6 +168,7 @@ func run(log *slog.Logger) error {
 
 	api := httpapi.New(httpapi.Options{
 		Users:          users,
+		Accounts:       accounts,
 		Rooms:          rooms,
 		Freezes:        freezes,
 		Events:         events,
@@ -181,6 +183,8 @@ func run(log *slog.Logger) error {
 		AuthTTL:        cfg.AuthTTL,
 		JWTSecret:      cfg.JWTSecret,
 		JWTTTL:         cfg.JWTTTL,
+		RefreshTTL:     cfg.RefreshTTL,
+		VAPIDPublicKey: cfg.VAPIDPublicKey,
 		AuthLimiter:    ratelimit.New(rdb, "auth", 10, time.Minute, log),
 		APILimiter:     ratelimit.New(rdb, "api", 120, time.Minute, log),
 		CheckinLimiter: ratelimit.New(rdb, "checkin", 20, time.Hour, log),

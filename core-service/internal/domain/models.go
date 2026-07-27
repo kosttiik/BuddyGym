@@ -28,6 +28,21 @@ type User struct {
 	HasAvatar    bool      `json:"has_avatar"`
 	AvatarKey    string    `json:"-"`
 	AvatarSource string    `json:"-"`
+	TelegramID   int64     `json:"-"`
+}
+
+type AccountState struct {
+	WebLoginEnabled              bool `json:"web_login_enabled"`
+	TelegramLinked               bool `json:"telegram_linked"`
+	PushEnabled                  bool `json:"push_enabled"`
+	TelegramNotificationsEnabled bool `json:"telegram_notifications_enabled"`
+}
+
+type PushSubscription struct {
+	ID       string `json:"id"`
+	Endpoint string `json:"endpoint"`
+	P256DH   string `json:"p256dh"`
+	Auth     string `json:"auth"`
 }
 
 type Achievement struct {
@@ -60,6 +75,10 @@ type RoomAvatar struct {
 
 func RoomAvatarKey(roomID int64) string {
 	return "rooms/" + strconv.FormatInt(roomID, 10) + "/" + uuid.NewString()
+}
+
+func UserAvatarKey(userID int64) string {
+	return "avatars/" + strconv.FormatInt(userID, 10) + "/" + uuid.NewString()
 }
 
 type RoomWithProgress struct {

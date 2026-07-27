@@ -109,16 +109,19 @@ class Sender:
     async def send(self, item: Outgoing) -> SendResult:
         if self._settings.mode is BotMode.DRY_RUN or self._bot is None:
             return await self._dry_run(item)
+        if not item.payload.get("telegram_enabled", True):
+            return SendResult(item.id, "skipped")
 
         text = caption(item.kind, item.payload)
         keyboard = self._keyboard(item.payload)
+        chat_id = int(item.payload.get("telegram_chat_id", item.chat_id))
 
-        async with self._chat_lock(item.chat_id):
+        async with self._chat_lock(chat_id):
             try:
                 async with self._global:
-                    await self._bot.send_chat_action(item.chat_id, "upload_photo")
+                    await self._bot.send_chat_action(chat_id, "upload_photo")
                     message = await self._bot.send_photo(
-                        item.chat_id,
+                        chat_id,
                         BufferedInputFile(self._placeholder, "buddygym.png"),
                         caption=text,
                         reply_markup=keyboard,
@@ -136,7 +139,7 @@ class Sender:
                 card = await self._card_bytes(item)
                 async with self._global:
                     await self._bot.edit_message_media(
-                        chat_id=item.chat_id,
+                        chat_id=chat_id,
                         message_id=message.message_id,
                         media=InputMediaPhoto(
                             media=BufferedInputFile(card, "buddygym.png"), caption=text

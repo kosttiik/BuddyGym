@@ -25,6 +25,27 @@ type UsersRepo interface {
 	Stats(ctx context.Context, userID int64) (domain.Stats, error)
 }
 
+type AccountsRepo interface {
+	UserByTelegram(ctx context.Context, telegramID int64) (domain.User, error)
+	CreateTelegramUser(ctx context.Context, telegramID int64, username, firstName, photoURL string) (domain.User, error)
+	CreateLocalUser(ctx context.Context, username, firstName, passwordHash string) (domain.User, error)
+	PasswordUser(ctx context.Context, username string) (domain.User, string, error)
+	CredentialHash(ctx context.Context, userID int64) (string, error)
+	SetCredentials(ctx context.Context, userID int64, username, passwordHash string) (domain.User, error)
+	UpdateProfile(ctx context.Context, userID int64, username, firstName string) (domain.User, error)
+	State(ctx context.Context, userID int64) (domain.AccountState, error)
+	CreateSession(ctx context.Context, userID int64, raw string, expiresAt time.Time) error
+	RotateSession(ctx context.Context, current, next string, nextExpiresAt time.Time) (domain.User, error)
+	RevokeSession(ctx context.Context, raw string) error
+	CreateLinkToken(ctx context.Context, userID int64, raw string, expiresAt time.Time) error
+	LinkTelegram(ctx context.Context, raw string, telegramID int64) (domain.User, error)
+	SetCustomAvatar(ctx context.Context, userID int64, key string) (domain.User, string, error)
+	ClearCustomAvatar(ctx context.Context, userID int64) (domain.User, string, error)
+	UpsertPushSubscription(ctx context.Context, userID int64, endpoint, p256dh, auth string) (domain.PushSubscription, error)
+	DeletePushSubscription(ctx context.Context, userID int64, id string) error
+	UpdateNotificationPreferences(ctx context.Context, userID int64, push, telegram *bool) (domain.AccountState, error)
+}
+
 type RoomsRepo interface {
 	Create(ctx context.Context, room domain.Room) (domain.Room, error)
 	Get(ctx context.Context, id int64) (domain.Room, error)
@@ -51,7 +72,7 @@ type AvatarStore interface {
 }
 
 type AvatarMirror interface {
-	SyncInBackground(userID int64, photoURL, mirroredFrom string)
+	SyncInBackground(userID, telegramID int64, photoURL, mirroredFrom string)
 }
 
 type BuddiesRepo interface {
@@ -109,6 +130,7 @@ type RateLimiter interface {
 
 type Server struct {
 	users          UsersRepo
+	accounts       AccountsRepo
 	rooms          RoomsRepo
 	freezes        FreezesRepo
 	events         EventsRepo
@@ -123,6 +145,8 @@ type Server struct {
 	authTTL        time.Duration
 	jwtSecret      []byte
 	jwtTTL         time.Duration
+	refreshTTL     time.Duration
+	vapidPublicKey string
 	authLimiter    RateLimiter
 	apiLimiter     RateLimiter
 	checkinLimiter RateLimiter
@@ -134,6 +158,7 @@ type Server struct {
 
 type Options struct {
 	Users          UsersRepo
+	Accounts       AccountsRepo
 	Rooms          RoomsRepo
 	Freezes        FreezesRepo
 	Events         EventsRepo
@@ -148,6 +173,8 @@ type Options struct {
 	AuthTTL        time.Duration
 	JWTSecret      []byte
 	JWTTTL         time.Duration
+	RefreshTTL     time.Duration
+	VAPIDPublicKey string
 	AuthLimiter    RateLimiter
 	APILimiter     RateLimiter
 	CheckinLimiter RateLimiter
@@ -166,6 +193,7 @@ func New(opts Options) *Server {
 	}
 	return &Server{
 		users:          opts.Users,
+		accounts:       opts.Accounts,
 		rooms:          opts.Rooms,
 		freezes:        opts.Freezes,
 		events:         opts.Events,
@@ -180,6 +208,8 @@ func New(opts Options) *Server {
 		authTTL:        opts.AuthTTL,
 		jwtSecret:      opts.JWTSecret,
 		jwtTTL:         opts.JWTTTL,
+		refreshTTL:     opts.RefreshTTL,
+		vapidPublicKey: opts.VAPIDPublicKey,
 		authLimiter:    opts.AuthLimiter,
 		apiLimiter:     opts.APILimiter,
 		checkinLimiter: opts.CheckinLimiter,
@@ -195,9 +225,21 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("GET /api/v1/health", s.handleHealth)
 	mux.HandleFunc("POST /api/v1/auth/telegram", s.handleAuthTelegram)
+	mux.HandleFunc("POST /api/v1/auth/register", s.handleAuthRegister)
+	mux.HandleFunc("POST /api/v1/auth/login", s.handleAuthLogin)
+	mux.HandleFunc("POST /api/v1/auth/refresh", s.handleAuthRefresh)
+	mux.HandleFunc("POST /api/v1/auth/logout", s.handleAuthLogout)
+	mux.HandleFunc("GET /api/v1/push/public-key", s.withAuth(s.handlePushPublicKey))
 
 	mux.HandleFunc("GET /api/v1/me", s.withAuth(s.handleGetMe))
 	mux.HandleFunc("PATCH /api/v1/me", s.withAuth(s.handlePatchMe))
+	mux.HandleFunc("PATCH /api/v1/me/credentials", s.withAuth(s.handleSetCredentials))
+	mux.HandleFunc("POST /api/v1/me/telegram-link", s.withAuth(s.handleCreateTelegramLink))
+	mux.HandleFunc("PUT /api/v1/me/avatar", s.withAuth(s.handlePutMyAvatar))
+	mux.HandleFunc("DELETE /api/v1/me/avatar", s.withAuth(s.handleDeleteMyAvatar))
+	mux.HandleFunc("POST /api/v1/me/push-subscriptions", s.withAuth(s.handleUpsertPushSubscription))
+	mux.HandleFunc("DELETE /api/v1/me/push-subscriptions/{id}", s.withAuth(s.handleDeletePushSubscription))
+	mux.HandleFunc("PATCH /api/v1/me/notification-preferences", s.withAuth(s.handleNotificationPreferences))
 
 	mux.HandleFunc("GET /api/v1/users/{id}", s.withAuth(s.handleGetUser))
 	mux.HandleFunc("GET /api/v1/users/{id}/avatar", s.withAuth(s.handleGetAvatar))

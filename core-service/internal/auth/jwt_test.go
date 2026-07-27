@@ -22,6 +22,27 @@ func TestTokenRoundtrip(t *testing.T) {
 	}
 }
 
+func TestTokenAuthMethod(t *testing.T) {
+	now := time.Now()
+	token, err := IssueTokenWithMethod(
+		jwtSecret,
+		42,
+		AuthMethodTelegram,
+		time.Hour,
+		now,
+	)
+	if err != nil {
+		t.Fatalf("issue: %v", err)
+	}
+	access, err := VerifyAccessToken(jwtSecret, token, now.Add(30*time.Minute))
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	if access.UserID != 42 || access.AuthMethod != AuthMethodTelegram {
+		t.Fatalf("unexpected access token: %+v", access)
+	}
+}
+
 func TestTokenExpired(t *testing.T) {
 	now := time.Now()
 	token, _ := IssueToken(jwtSecret, 42, time.Hour, now)

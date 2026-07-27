@@ -8,16 +8,18 @@ import (
 )
 
 type Config struct {
-	BotToken    string
-	HTTPAddr    string
-	GRPCAddr    string
-	DBDSN       string
-	RedisAddr   string
-	CheckinAddr string
-	AuthTTL     time.Duration
-	JWTSecret   []byte
-	JWTTTL      time.Duration
-	S3          S3Config
+	BotToken       string
+	HTTPAddr       string
+	GRPCAddr       string
+	DBDSN          string
+	RedisAddr      string
+	CheckinAddr    string
+	AuthTTL        time.Duration
+	JWTSecret      []byte
+	JWTTTL         time.Duration
+	RefreshTTL     time.Duration
+	VAPIDPublicKey string
+	S3             S3Config
 }
 
 type S3Config struct {
@@ -35,12 +37,13 @@ func (c S3Config) Enabled() bool {
 
 func Load() (Config, error) {
 	cfg := Config{
-		BotToken:    os.Getenv("BOT_TOKEN"),
-		HTTPAddr:    getenv("CORE_HTTP_ADDR", ":8080"),
-		GRPCAddr:    getenv("CORE_GRPC_ADDR", ":9090"),
-		DBDSN:       os.Getenv("CORE_DB_DSN"),
-		RedisAddr:   getenv("REDIS_ADDR", "localhost:6379"),
-		CheckinAddr: getenv("CHECKIN_GRPC_ADDR", "localhost:9091"),
+		BotToken:       os.Getenv("BOT_TOKEN"),
+		HTTPAddr:       getenv("CORE_HTTP_ADDR", ":8080"),
+		GRPCAddr:       getenv("CORE_GRPC_ADDR", ":9090"),
+		DBDSN:          os.Getenv("CORE_DB_DSN"),
+		RedisAddr:      getenv("REDIS_ADDR", "localhost:6379"),
+		CheckinAddr:    getenv("CHECKIN_GRPC_ADDR", "localhost:9091"),
+		VAPIDPublicKey: os.Getenv("VAPID_PUBLIC_KEY"),
 		S3: S3Config{
 			Endpoint:      os.Getenv("S3_ENDPOINT"),
 			AccessKey:     os.Getenv("S3_ACCESS_KEY"),
@@ -67,7 +70,8 @@ func Load() (Config, error) {
 		dst      *time.Duration
 	}{
 		{"AUTH_TTL", "24h", &cfg.AuthTTL},
-		{"JWT_TTL", "24h", &cfg.JWTTTL},
+		{"JWT_TTL", "15m", &cfg.JWTTTL},
+		{"REFRESH_TTL", "720h", &cfg.RefreshTTL},
 	} {
 		raw := getenv(d.key, d.def)
 		ttl, err := time.ParseDuration(raw)

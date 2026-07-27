@@ -65,9 +65,13 @@ func (r *Users) UpdateTimezone(ctx context.Context, id int64, timezone string) (
 
 func (r *Users) PendingAvatars(ctx context.Context) ([]domain.User, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, photo_url, avatar_source FROM users
-		WHERE photo_url <> '' AND photo_url IS DISTINCT FROM avatar_source
-		ORDER BY id`)
+		SELECT u.id, i.subject::bigint, u.photo_url, u.avatar_source
+		FROM users u
+		JOIN auth_identities i ON i.user_id = u.id AND i.provider = 'telegram'
+		WHERE u.photo_url <> ''
+		  AND u.photo_url IS DISTINCT FROM u.avatar_source
+		  AND NOT u.avatar_custom
+		ORDER BY u.id`)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +80,7 @@ func (r *Users) PendingAvatars(ctx context.Context) ([]domain.User, error) {
 	var out []domain.User
 	for rows.Next() {
 		var u domain.User
-		if err := rows.Scan(&u.ID, &u.PhotoURL, &u.AvatarSource); err != nil {
+		if err := rows.Scan(&u.ID, &u.TelegramID, &u.PhotoURL, &u.AvatarSource); err != nil {
 			return nil, err
 		}
 		out = append(out, u)
@@ -86,7 +90,8 @@ func (r *Users) PendingAvatars(ctx context.Context) ([]domain.User, error) {
 
 func (r *Users) SetAvatar(ctx context.Context, id int64, key, source string) error {
 	_, err := r.pool.Exec(ctx,
-		"UPDATE users SET avatar_key = $2, avatar_source = $3 WHERE id = $1", id, key, source)
+		"UPDATE users SET avatar_key = $2, avatar_source = $3 WHERE id = $1 AND NOT avatar_custom",
+		id, key, source)
 	return err
 }
 

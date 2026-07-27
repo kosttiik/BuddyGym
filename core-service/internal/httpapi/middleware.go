@@ -15,11 +15,19 @@ import (
 
 type ctxKey int
 
-const userKey ctxKey = iota
+const (
+	userKey ctxKey = iota
+	authMethodKey
+)
 
 func userFrom(ctx context.Context) domain.User {
 	u, _ := ctx.Value(userKey).(domain.User)
 	return u
+}
+
+func authMethodFrom(ctx context.Context) string {
+	method, _ := ctx.Value(authMethodKey).(string)
+	return method
 }
 
 const bearerScheme = "Bearer "
@@ -32,11 +40,12 @@ func (s *Server) withAuth(next http.HandlerFunc) http.HandlerFunc {
 			writeErr(w, http.StatusUnauthorized, "expected Authorization: Bearer <token>")
 			return
 		}
-		userID, err := auth.VerifyToken(s.jwtSecret, token, s.now())
+		access, err := auth.VerifyAccessToken(s.jwtSecret, token, s.now())
 		if err != nil {
 			writeErr(w, http.StatusUnauthorized, "invalid or expired token")
 			return
 		}
+		userID := access.UserID
 		if !s.allow(w, r, s.apiLimiter, strconv.FormatInt(userID, 10)) {
 			return
 		}
@@ -49,7 +58,9 @@ func (s *Server) withAuth(next http.HandlerFunc) http.HandlerFunc {
 			s.internal(w, err)
 			return
 		}
-		next(w, r.WithContext(context.WithValue(r.Context(), userKey, user)))
+		ctx := context.WithValue(r.Context(), userKey, user)
+		ctx = context.WithValue(ctx, authMethodKey, access.AuthMethod)
+		next(w, r.WithContext(ctx))
 	}
 }
 

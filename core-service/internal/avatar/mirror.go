@@ -40,7 +40,11 @@ func NewMirror(users UsersRepo, telegram Fetcher, store Uploader, log *slog.Logg
 	return &Mirror{users: users, telegram: telegram, store: store, log: log}
 }
 
-func (m *Mirror) Sync(ctx context.Context, userID int64, photoURL, mirroredFrom string) error {
+func (m *Mirror) Sync(
+	ctx context.Context,
+	userID, telegramID int64,
+	photoURL, mirroredFrom string,
+) error {
 	if photoURL == mirroredFrom {
 		return nil
 	}
@@ -48,7 +52,7 @@ func (m *Mirror) Sync(ctx context.Context, userID int64, photoURL, mirroredFrom 
 		return m.users.SetAvatar(ctx, userID, "", "")
 	}
 
-	data, err := m.telegram.Fetch(ctx, userID)
+	data, err := m.telegram.Fetch(ctx, telegramID)
 	if errors.Is(err, ErrNoPhoto) {
 		return m.users.SetAvatar(ctx, userID, "", photoURL)
 	}
@@ -63,14 +67,14 @@ func (m *Mirror) Sync(ctx context.Context, userID int64, photoURL, mirroredFrom 
 	return m.users.SetAvatar(ctx, userID, key, photoURL)
 }
 
-func (m *Mirror) SyncInBackground(userID int64, photoURL, mirroredFrom string) {
+func (m *Mirror) SyncInBackground(userID, telegramID int64, photoURL, mirroredFrom string) {
 	if photoURL == mirroredFrom {
 		return
 	}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(context.Background()), mirrorTimeout)
 		defer cancel()
-		if err := m.Sync(ctx, userID, photoURL, mirroredFrom); err != nil {
+		if err := m.Sync(ctx, userID, telegramID, photoURL, mirroredFrom); err != nil {
 			m.log.Error("mirror avatar", "err", err, "user_id", userID)
 		}
 	}()
