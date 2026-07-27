@@ -12,6 +12,7 @@ from src.notifications.events import CoreReader
 from src.notifications.photos import PhotoSource
 from src.notifications.sender import Sender
 from src.notifications.service import NotificationService
+from src.notifications.web_push import WebPushSender
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger("buddygym.bot")
@@ -25,9 +26,10 @@ def build(settings: Settings) -> tuple[NotificationService, Bot | None, PhotoSou
     bot = Bot(settings.bot_token) if settings.mode is BotMode.LIVE and settings.bot_token else None
     photos = PhotoSource(settings)
     sender = Sender(bot, settings, photos, log)
+    push_sender = WebPushSender(settings, log) if settings.vapid_private_key else None
     reader = CoreReader(core_engine, settings.reminder_local_hour)
     return (
-        NotificationService(reader, sessions, sender, settings, log),
+        NotificationService(reader, sessions, sender, settings, push_sender, log),
         bot,
         photos,
     )
@@ -62,15 +64,18 @@ async def main() -> None:
 
         @dispatcher.message(CommandStart())
         async def on_start(message: Message) -> None:
-            # a /start is the moment the chat becomes writable: flush what was held back and
-            # greet with a branded card, once per user
-            await service.mark_reachable(message.chat.id)
+            user_id = await service.user_id_for_telegram(message.chat.id)
+            if user_id is None:
+                return
+            await service.mark_reachable(user_id)
             language = (message.from_user.language_code or "ru").split("-")[0]
-            await service.queue_welcome(message.chat.id, "en" if language == "en" else "ru")
+            await service.queue_welcome(user_id, "en" if language == "en" else "ru")
 
         @dispatcher.message(F.text)
         async def on_any(message: Message) -> None:
-            await service.mark_reachable(message.chat.id)
+            user_id = await service.user_id_for_telegram(message.chat.id)
+            if user_id is not None:
+                await service.mark_reachable(user_id)
 
         log.info("bot polling as live")
         tasks.append(asyncio.create_task(dispatcher.start_polling(bot)))

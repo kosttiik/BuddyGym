@@ -3,6 +3,7 @@ package httpapi
 import (
 	"net/http"
 	"slices"
+	"strings"
 
 	"github.com/kosttiik/BuddyGym/core-service/internal/domain"
 )
@@ -11,6 +12,7 @@ var allowedThemes = []string{"default", "dark", "neon"}
 
 type MeResponse struct {
 	User         domain.User                  `json:"user"`
+	Account      domain.AccountState          `json:"account"`
 	Achievements []domain.AchievementProgress `json:"achievements"`
 	Stats        domain.Stats                 `json:"stats"`
 	BestStreak   int                          `json:"best_streak"`
@@ -21,6 +23,8 @@ type UpdateMeRequest struct {
 	Language *string `json:"language,omitempty" example:"ru" enums:"ru,en"`
 	// Timezone is an IANA name; periods close at this zone's midnight.
 	Timezone    *string `json:"timezone,omitempty" example:"Europe/Moscow"`
+	Username    *string `json:"username,omitempty" example:"kostik"`
+	FirstName   *string `json:"first_name,omitempty" example:"Константин"`
 	StatusEmoji *string `json:"status_emoji,omitempty"`
 	StatusText  *string `json:"status_text,omitempty" example:"На массе"`
 }
@@ -41,8 +45,17 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 		s.internal(w, err)
 		return
 	}
+	var account domain.AccountState
+	if s.accounts != nil {
+		account, err = s.accounts.State(r.Context(), user.ID)
+		if err != nil {
+			s.internal(w, err)
+			return
+		}
+	}
 	writeJSON(w, http.StatusOK, MeResponse{
 		User:         user,
+		Account:      account,
 		Achievements: progress,
 		Stats:        stats,
 		BestStreak:   stats.BestStreak,
@@ -86,6 +99,38 @@ func (s *Server) handlePatchMe(w http.ResponseWriter, r *http.Request) {
 	}
 	userID := userFrom(r.Context()).ID
 	user := userFrom(r.Context())
+
+	if req.Username != nil || req.FirstName != nil {
+		if s.accounts == nil {
+			writeErr(w, http.StatusServiceUnavailable, "profile editing is unavailable")
+			return
+		}
+		username, firstName := user.Username, user.FirstName
+		if req.Username != nil {
+			username = normalizeUsername(*req.Username)
+		}
+		if req.FirstName != nil {
+			firstName = strings.TrimSpace(*req.FirstName)
+		}
+		if !usernamePattern.MatchString(username) {
+			writeErr(w, http.StatusBadRequest, "username must be 3..32 lowercase letters, digits or underscores")
+			return
+		}
+		if !validName(firstName) {
+			writeErr(w, http.StatusBadRequest, "first_name must be 1..64 characters")
+			return
+		}
+		updated, err := s.accounts.UpdateProfile(r.Context(), userID, username, firstName)
+		if err != nil {
+			if conflict(err) {
+				writeErr(w, http.StatusConflict, "username is unavailable")
+			} else {
+				s.mapError(w, err)
+			}
+			return
+		}
+		user = updated
+	}
 
 	if req.Theme != nil {
 		if !slices.Contains(allowedThemes, *req.Theme) {

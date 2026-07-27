@@ -46,6 +46,15 @@ class UserContext:
     username: str
     avatar_key: str
     language: str = "ru"
+    telegram_id: int | None = None
+    telegram_enabled: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class PushTarget:
+    endpoint: str
+    p256dh: str
+    auth: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,8 +147,14 @@ class CoreReader:
             return {}
         query = text(
             """
-            SELECT id, first_name, username, avatar_key, language
-            FROM users WHERE id = ANY(:ids)
+            SELECT u.id, u.first_name, u.username, u.avatar_key, u.language,
+                   i.subject AS telegram_id,
+                   COALESCE(p.telegram_enabled, true) AS telegram_enabled
+            FROM users u
+            LEFT JOIN auth_identities i
+              ON i.user_id = u.id AND i.provider = 'telegram'
+            LEFT JOIN notification_preferences p ON p.user_id = u.id
+            WHERE u.id = ANY(:ids)
             """
         )
         async with self._engine.connect() as conn:
@@ -151,9 +166,38 @@ class CoreReader:
                     username=row.username,
                     avatar_key=row.avatar_key or "",
                     language=row.language or "ru",
+                    telegram_id=int(row.telegram_id) if row.telegram_id else None,
+                    telegram_enabled=row.telegram_enabled,
                 )
                 for row in rows
             }
+
+    async def user_id_for_telegram(self, telegram_id: int) -> int | None:
+        query = text(
+            """
+            SELECT user_id
+            FROM auth_identities
+            WHERE provider = 'telegram' AND subject = :subject
+            """
+        )
+        async with self._engine.connect() as conn:
+            row = (await conn.execute(query, {"subject": str(telegram_id)})).first()
+        return int(row.user_id) if row else None
+
+    async def push_targets(self, user_id: int) -> list[PushTarget]:
+        query = text(
+            """
+            SELECT s.endpoint, s.p256dh, s.auth
+            FROM push_subscriptions s
+            JOIN notification_preferences p ON p.user_id = s.user_id
+            WHERE s.user_id = :user_id AND p.push_enabled
+            """
+        )
+        async with self._engine.connect() as conn:
+            rows = await conn.execute(query, {"user_id": user_id})
+            return [
+                PushTarget(endpoint=row.endpoint, p256dh=row.p256dh, auth=row.auth) for row in rows
+            ]
 
     async def checkin_owner(self, checkin_id: str) -> int | None:
         """The outbox carries checkin ids only, so the author is looked up by its create event."""

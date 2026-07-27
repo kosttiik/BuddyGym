@@ -12,6 +12,7 @@ from src.notifications.events import CoreReader, Event
 from src.notifications.fanout import Delivery, recipients_for
 from src.notifications.models import Cursor, DeliveryStatus, Notification, Recipient
 from src.notifications.sender import Outgoing, Sender, SendResult
+from src.notifications.web_push import WebPushSender
 
 CURSOR_NAME = "events"
 
@@ -33,12 +34,14 @@ class NotificationService:
         sessions: async_sessionmaker,
         sender: Sender,
         settings: Settings,
+        push_sender: WebPushSender | None = None,
         logger: logging.Logger | None = None,
         now=lambda: datetime.now(UTC),
     ) -> None:
         self._core = core
         self._sessions = sessions
         self._sender = sender
+        self._push_sender = push_sender
         self._settings = settings
         self._log = logger or logging.getLogger(__name__)
         self._now = now
@@ -94,6 +97,11 @@ class NotificationService:
                 payload["actor_avatar_key"] = actor.avatar_key
             recipient = users.get(delivery.chat_id)
             payload["language"] = recipient.language if recipient else "ru"
+            payload["telegram_enabled"] = bool(
+                recipient and recipient.telegram_enabled and recipient.telegram_id
+            )
+            if recipient and recipient.telegram_id:
+                payload["telegram_chat_id"] = recipient.telegram_id
             # a verdict card draws the recipient's own goal and sport, not the room defaults
             if delivery.kind in {"approved", "rejected", "buddy_credited"}:
                 member = await self._core.member(event.room_id, delivery.chat_id)
@@ -199,15 +207,45 @@ class NotificationService:
             items = [
                 Outgoing(row.id, row.chat_id, row.kind, json.loads(row.payload), row.attempts)
                 for row in rows
-                if row.chat_id not in unreachable
             ]
 
         results: list[SendResult] = []
         for item in items:
+            recipient = (await self._core.users([item.chat_id])).get(item.chat_id)
+            item.payload["telegram_enabled"] = bool(
+                recipient
+                and recipient.telegram_enabled
+                and recipient.telegram_id
+                and item.chat_id not in unreachable
+            )
+            if recipient and recipient.telegram_id:
+                item.payload["telegram_chat_id"] = recipient.telegram_id
             result = await self._sender.send(item)
+            pushed = None
+            if self._push_sender is not None:
+                targets = await self._core.push_targets(item.chat_id)
+                pushed = await self._push_sender.send(item, targets)
+                if pushed and result.status != DeliveryStatus.SENT:
+                    result = SendResult(item.id, DeliveryStatus.SENT)
+                elif pushed is False and result.status == DeliveryStatus.SKIPPED:
+                    result = SendResult(
+                        item.id,
+                        DeliveryStatus.PENDING,
+                        error="web push delivery failed",
+                        attempts=item.attempts,
+                    )
+            if (
+                item.chat_id in unreachable
+                and result.status == DeliveryStatus.SKIPPED
+                and pushed is None
+            ):
+                continue
             results.append(result)
             await self._apply(result, item.chat_id)
         return results
+
+    async def user_id_for_telegram(self, telegram_id: int) -> int | None:
+        return await self._core.user_id_for_telegram(telegram_id)
 
     async def _apply(self, result: SendResult, chat_id: int) -> None:
         async with self._sessions() as session:
