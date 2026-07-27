@@ -301,3 +301,28 @@ async def test_web_push_delivers_when_telegram_is_unreachable(env):
 
     assert [item.chat_id for item in push_sender.sent] == [2]
     assert [item.chat_id for item in sender.sent] == [3]
+
+
+async def test_disabled_telegram_keeps_web_push_enabled(env):
+    service, sender, push_sender, engine, _ = env
+    async with engine.begin() as conn:
+        await conn.execute(
+            text(
+                "INSERT INTO notification_preferences"
+                " (user_id, telegram_enabled, push_enabled) VALUES (2, false, true)"
+            )
+        )
+        await conn.execute(
+            text(
+                "INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth)"
+                " VALUES ('00000000-0000-0000-0000-000000000001', 2,"
+                " 'https://push.example.test/2', 'key', 'auth')"
+            )
+        )
+
+    await add_event(engine, "checkin.created", 1, {"checkin_id": "c1", "status": "pending"})
+    await service.ingest()
+    await service.deliver_pending()
+
+    assert [item.chat_id for item in push_sender.sent] == [2]
+    assert [item.chat_id for item in sender.sent] == [3]

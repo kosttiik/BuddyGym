@@ -305,6 +305,9 @@ func TestWebRegisterLoginRefreshLogout(t *testing.T) {
 	if response.Token == "" || response.User.Username != "athlete_1" {
 		t.Fatalf("unexpected response: %+v", response)
 	}
+	if rec.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("auth response can be cached: %q", rec.Header().Get("Cache-Control"))
+	}
 	cookies := rec.Result().Cookies()
 	if len(cookies) != 1 || !cookies[0].HttpOnly || !cookies[0].Secure {
 		t.Fatalf("refresh cookie is not protected: %+v", cookies)
@@ -328,6 +331,9 @@ func TestWebRegisterLoginRefreshLogout(t *testing.T) {
 	e.handler.ServeHTTP(refreshRec, req)
 	if refreshRec.Code != http.StatusOK {
 		t.Fatalf("refresh: %d %s", refreshRec.Code, refreshRec.Body.String())
+	}
+	if refreshRec.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("refresh response can be cached: %q", refreshRec.Header().Get("Cache-Control"))
 	}
 	if len(accounts.sessions) == 0 {
 		t.Fatal("rotated session was not stored")

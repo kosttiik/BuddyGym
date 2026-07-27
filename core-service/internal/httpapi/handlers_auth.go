@@ -86,6 +86,7 @@ func (s *Server) issueAuth(
 	user domain.User,
 	authMethod string,
 ) {
+	w.Header().Set("Cache-Control", "no-store")
 	token, err := auth.IssueTokenWithMethod(
 		s.jwtSecret,
 		user.ID,
@@ -288,6 +289,7 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 // @Failure		401	{object}	ErrorResponse
 // @Router			/auth/refresh [post]
 func (s *Server) handleAuthRefresh(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	if s.accounts == nil {
 		writeErr(w, http.StatusUnauthorized, "invalid session")
 		return
