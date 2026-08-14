@@ -2910,8 +2910,14 @@ const docTemplate = `{
                 "language": {
                     "type": "string"
                 },
+                "last_closed_period_count": {
+                    "type": "integer"
+                },
                 "last_closed_period_failed": {
                     "type": "boolean"
+                },
+                "missed_periods": {
+                    "type": "integer"
                 },
                 "period_ends_at": {
                     "type": "string"

@@ -389,6 +389,8 @@ func (s *Server) handleGetRoom(w http.ResponseWriter, r *http.Request) {
 		members[i].WorkoutsCount = in.CurrentCount(now)
 		members[i].PeriodEndsAt = in.PeriodEndsAt(now)
 		members[i].HasClosedPeriod, members[i].LastClosedPeriodFailed = in.Judgment(now)
+		members[i].LastClosedPeriodCount, _ = in.LastClosedPeriodCount(now)
+		members[i].MissedPeriods = in.MissedPeriods(now)
 		members[i].Freeze = domain.CurrentFreeze(in.Freezes, now)
 		if until := domain.FreezeCooldownUntil(in.Freezes, now); !until.IsZero() {
 			members[i].FreezeCooldownUntil = &until

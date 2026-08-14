@@ -672,6 +672,53 @@ func TestResultsPeriodRollover(t *testing.T) {
 	}
 }
 
+func TestResultsMissedPeriodsUseClosedPeriodsAndFreezes(t *testing.T) {
+	ctx := context.Background()
+	results := storage.NewResults(pool(t))
+	freezes := storage.NewFreezes(pool(t))
+	mustUser(t, 119)
+	room := mustRoom(t, 119)
+	now := time.Now().UTC().Truncate(24 * time.Hour).Add(12 * time.Hour)
+	if _, err := pool(t).Exec(ctx,
+		"UPDATE memberships SET joined_at = $2 WHERE room_id = $1", room.ID, now.AddDate(0, 0, -21)); err != nil {
+		t.Fatal(err)
+	}
+
+	for i, day := range []time.Time{
+		now.AddDate(0, 0, -20), now.AddDate(0, 0, -19), now.AddDate(0, 0, -12),
+	} {
+		if _, err := results.Apply(ctx, fmt.Sprintf("chk-missed-%d", i), room.ID, 119,
+			storage.ResultApproved, day); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	inputs, err := results.StreaksByRoom(ctx, room.ID)
+	if err != nil || len(inputs) != 1 {
+		t.Fatalf("StreaksByRoom = %v %v, want one input", inputs, err)
+	}
+	if got := inputs[0].MissedPeriods(now); got != 3 {
+		t.Errorf("missed periods = %d, want 3", got)
+	}
+	if got, ok := inputs[0].LastClosedPeriodCount(now); !ok || got != 0 {
+		t.Errorf("last closed period = %d %v, want 0 true", got, ok)
+	}
+
+	if _, err := freezes.Create(ctx, room.ID, 119, now.AddDate(0, 0, -7), now); err != nil {
+		t.Fatal(err)
+	}
+	inputs, err = results.StreaksByRoom(ctx, room.ID)
+	if err != nil || len(inputs) != 1 {
+		t.Fatalf("StreaksByRoom after freeze = %v %v", inputs, err)
+	}
+	if got := inputs[0].MissedPeriods(now); got != 2 {
+		t.Errorf("missed periods after freeze = %d, want 2", got)
+	}
+	if got, ok := inputs[0].LastClosedPeriodCount(now); !ok || got != 1 {
+		t.Errorf("last judged period after freeze = %d %v, want 1 true", got, ok)
+	}
+}
+
 // The room is goal 3 per 7 days. The member joins today, so every day below sits in the
 // period in progress and the streak is simply the number of distinct workout days.
 func TestResultsStreakInputs(t *testing.T) {
