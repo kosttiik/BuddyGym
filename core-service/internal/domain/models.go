@@ -102,6 +102,8 @@ type Member struct {
 	EffectiveGoal          int        `json:"effective_goal"`
 	HasClosedPeriod        bool       `json:"has_closed_period"`
 	LastClosedPeriodFailed bool       `json:"last_closed_period_failed"`
+	LastClosedPeriodCount  int        `json:"last_closed_period_count"`
+	MissedPeriods          int        `json:"missed_periods"`
 	Freeze                 *Freeze    `json:"freeze,omitempty"`
 	FreezeCooldownUntil    *time.Time `json:"freeze_cooldown_until,omitempty"`
 }

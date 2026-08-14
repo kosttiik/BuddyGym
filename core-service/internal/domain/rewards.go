@@ -55,17 +55,36 @@ func (in StreakInput) Streak(now time.Time) int {
 }
 
 func (in StreakInput) Judgment(now time.Time) (hasClosed, lastFailed bool) {
+	count, ok := in.LastClosedPeriodCount(now)
+	return ok, ok && count < in.Goal
+}
+
+func (in StreakInput) LastClosedPeriodCount(now time.Time) (int, bool) {
 	g, ok := in.grid(now)
 	if !ok {
-		return false, false
+		return 0, false
 	}
 	for k := g.current - 1; k >= 0; k-- {
 		if g.exempt(k) {
 			continue
 		}
-		return true, g.counts[k] < in.Goal
+		return g.counts[k], true
 	}
-	return false, false
+	return 0, false
+}
+
+func (in StreakInput) MissedPeriods(now time.Time) int {
+	g, ok := in.grid(now)
+	if !ok {
+		return 0
+	}
+	missed := 0
+	for k := 0; k < g.current; k++ {
+		if !g.exempt(k) && g.counts[k] < in.Goal {
+			missed++
+		}
+	}
+	return missed
 }
 
 // CurrentCount is how many days of the running period already carry an approved workout.

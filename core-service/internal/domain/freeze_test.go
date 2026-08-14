@@ -119,6 +119,30 @@ func TestPeriodJudgment(t *testing.T) {
 	}
 }
 
+func TestMissedPeriods(t *testing.T) {
+	joined := date(2026, 7, 1)
+	in := input([]time.Time{
+		date(2026, 7, 2), date(2026, 7, 4),
+		date(2026, 7, 9),
+		date(2026, 7, 23), date(2026, 7, 24),
+	}, joined, 2, 7)
+
+	if got := in.MissedPeriods(date(2026, 7, 29)); got != 2 {
+		t.Errorf("missed periods = %d, want 2", got)
+	}
+	if got, ok := in.LastClosedPeriodCount(date(2026, 7, 29)); !ok || got != 2 {
+		t.Errorf("last closed period = %d %v, want 2 true", got, ok)
+	}
+
+	in.Freezes = []Freeze{{StartsAt: date(2026, 7, 15), EndsAt: date(2026, 7, 22)}}
+	if got := in.MissedPeriods(date(2026, 7, 29)); got != 1 {
+		t.Errorf("missed periods with freeze = %d, want 1", got)
+	}
+	if got, ok := in.LastClosedPeriodCount(date(2026, 7, 29)); !ok || got != 2 {
+		t.Errorf("last judged period with freeze = %d %v, want 2 true", got, ok)
+	}
+}
+
 func TestCurrentFreeze(t *testing.T) {
 	now := date(2026, 7, 22)
 	active := Freeze{ID: 1, StartsAt: date(2026, 7, 20), EndsAt: date(2026, 7, 25)}

@@ -484,6 +484,9 @@ func TestStreakReachesTheClient(t *testing.T) {
 	if len(detail.Members) != 1 || detail.Members[0].Streak != 5 {
 		t.Errorf("member streak = %+v, want 5", detail.Members)
 	}
+	if detail.Members[0].LastClosedPeriodCount != 1 || detail.Members[0].MissedPeriods != 1 {
+		t.Errorf("member board stats = %+v, want last 1 and missed 1", detail.Members[0])
+	}
 
 	rec = e.do(t, "GET", "/api/v1/rooms", nil, reqOpts{userID: 1})
 	rooms := decode[[]domain.RoomWithProgress](t, rec)
