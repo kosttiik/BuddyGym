@@ -1,5 +1,10 @@
 # BuddyGym
 
+> **Project paused.** We suspended BuddyGym on October 17, 2026 and shut down the
+> hosted application. We have no confirmed return date. Source code and persistent
+> data are retained. Automatic service restarts are disabled; the commands below
+> remain available for manual development and recovery.
+
 BuddyGym is a Telegram Mini App and installable PWA for small workout rooms. Members log a
 workout with a photo for peer voting or with a verified gym location. Approved workouts feed
 progress, achievements, statuses, comments and profile themes.
