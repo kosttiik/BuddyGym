@@ -1,7 +1,7 @@
 services:
   postgres:
     image: postgres:17-alpine
-    restart: unless-stopped
+    restart: "no"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-buddygym}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-buddygym}
@@ -16,7 +16,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    restart: unless-stopped
+    restart: "no"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -25,7 +25,7 @@ services:
 
   minio:
     image: minio/minio:latest
-    restart: unless-stopped
+    restart: "no"
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-buddygym}
@@ -40,7 +40,7 @@ services:
 
   core:
     build: ./core-service
-    restart: unless-stopped
+    restart: "no"
     environment:
       BOT_TOKEN: ${BOT_TOKEN}
       CORE_HTTP_ADDR: ":8080"
@@ -94,7 +94,7 @@ services:
 
   checkin:
     build: ./checkin-service
-    restart: unless-stopped
+    restart: "no"
     environment: *checkin_env
     depends_on:
       checkin-migrate:
@@ -112,7 +112,7 @@ services:
 
   checkin-worker:
     build: ./checkin-service
-    restart: unless-stopped
+    restart: "no"
     command: uv run celery -A src.core.celery.celery_app worker --loglevel=info
     environment: *checkin_env
     depends_on:
@@ -125,7 +125,7 @@ services:
 
   checkin-beat:
     build: ./checkin-service
-    restart: unless-stopped
+    restart: "no"
     command: uv run celery -A src.core.celery.celery_app beat --loglevel=info
     environment: *checkin_env
     depends_on:
@@ -160,7 +160,7 @@ services:
 
   bot:
     build: ./bot-service
-    restart: unless-stopped
+    restart: "no"
     environment: *bot_env
     depends_on:
       bot-migrate:
